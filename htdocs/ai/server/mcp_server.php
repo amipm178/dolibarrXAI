@@ -159,11 +159,11 @@ function mcp_log_request(array $req, $resp, float $tStart): void
 	}
 
 	$params   = isset($req['params']) && is_array($req['params']) ? $req['params'] : [];
-	$toolName = isset($params['name']) ? (string) $params['name'] : '';
+	$toolName = isset($params['name']) && is_string($params['name']) ? $params['name'] : '';
 	$toolArgs = isset($params['arguments']) ? $params['arguments'] : [];
 
 	$argumentKeys = McpLogSanitizer::argumentKeys($toolArgs);
-	$safeToolName = substr($toolName, 0, 255);
+	$safeToolName = preg_replace('/[\\x00-\\x1F\\x7F]/', '', substr($toolName, 0, 255));
 	$query = '[MCP] ' . $safeToolName . ' argument keys: ' . implode(',', $argumentKeys);
 
 	// Keep audit metadata, not customer/business values or tool result content.
