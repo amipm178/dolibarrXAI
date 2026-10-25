@@ -10,7 +10,7 @@ if (!defined('DOL_DOCUMENT_ROOT')) {
 }
 require_once DOL_DOCUMENT_ROOT.'/ai/class/mcp.class.php';
 
-class McpHandlerSecurityTest extends PHPUnit\\Framework\\TestCase
+class McpHandlerSecurityTest extends PHPUnit\Framework\TestCase
 {
 	private $testRoot;
 	private $outsideRoot;
