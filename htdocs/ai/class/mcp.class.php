@@ -182,6 +182,29 @@ class McpHandler
 	}
 
 	/**
+	 * Return whether a resolved path is a descendant of a resolved directory.
+	 *
+	 * Comparing raw string prefixes is unsafe: /tools-extra/file.php also starts
+	 * with /tools. realpath() also prevents a symlink inside the tools directory
+	 * from loading a PHP file outside it.
+	 *
+	 * @param string $path Path to check.
+	 * @param string $directory Allowed parent directory.
+	 * @return bool
+	 */
+	public static function isPathWithinDirectory($path, $directory)
+	{
+		$realPath = realpath($path);
+		$realDirectory = realpath($directory);
+		if ($realPath === false || $realDirectory === false) {
+			return false;
+		}
+
+		$prefix = rtrim($realDirectory, DIRECTORY_SEPARATOR).DIRECTORY_SEPARATOR;
+		return strpos($realPath, $prefix) === 0;
+	}
+
+	/**
 	 * Load native tools from the specific tools directory.
 	 *
 	 * Scans the ai/tools/ directory for PHP files. It validates the file paths
@@ -204,7 +227,7 @@ class McpHandler
 			try {
 				// Validate the file path before inclusion
 				$realFilePath = realpath($file);
-				if ($realFilePath === false || strpos($realFilePath, realpath($toolsDir)) !== 0) {
+				if ($realFilePath === false || !self::isPathWithinDirectory($realFilePath, $toolsDir)) {
 					dol_syslog('[McpHandler] Attempted to load tool outside of allowed directory: ' . $file, LOG_WARNING);
 					continue;
 				}
