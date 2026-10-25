@@ -271,7 +271,7 @@ class McpHandler
 					dol_syslog("[McpHandler] Tool class '{$className}' does not extend McpTool.", LOG_ERR);
 				}
 			} catch (\Throwable $e) {
-				dol_syslog("[McpHandler] Failed to load tool from file '{$file}': " . $e->getMessage(), LOG_ERR);
+				dol_syslog("[McpHandler] Failed to load tool from file '{$file}' (" . get_class($e) . ")", LOG_ERR);
 			}
 		}
 	}
@@ -325,7 +325,7 @@ class McpHandler
 				}
 			}
 		} catch (\Throwable $e) {
-			dol_syslog('[McpHandler] Error during \'addMcpTools\' hook execution: ' . $e->getMessage(), LOG_ERR);
+			dol_syslog('[McpHandler] Error during \'addMcpTools\' hook execution (' . get_class($e) . ')', LOG_ERR);
 		}
 	}
 
@@ -723,7 +723,7 @@ class McpHandler
 			dol_syslog('[McpHandler] Tool \'' . $toolName . '\' executed successfully.', LOG_INFO);
 			return $result;
 		} catch (\Throwable $e) {
-			dol_syslog('[McpHandler] Error executing tool \'' . $toolName . '\': ' . $e->getMessage(), LOG_ERR);
+			dol_syslog('[McpHandler] Error executing tool \'' . $toolName . '\' (' . get_class($e) . ')', LOG_ERR);
 			return ["error" => "An internal error occurred while executing the tool '{$toolName}'. Details have been logged."];
 		}
 	}
