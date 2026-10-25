@@ -168,7 +168,7 @@ class MCPServer
 	 *
 	 * @param array{jsonrpc?: string, method?: string, params?: array<mixed>, id?: string|int|null} $request The decoded JSON-RPC request array.
 	 * @return array{jsonrpc: string, id: string|int|null, result?: mixed, error?: array<string, mixed>}|null A JSON-RPC response array, or null for notifications.
-	 * @throws Exception On processing errors.
+	 * @throws Throwable On processing errors.
 	 */
 	public function handleRequest(array $request): ?array
 	{
@@ -288,8 +288,11 @@ class MCPServer
 				default:
 					return $this->errorResponse(-32601, "Method not found: $method");
 			}
-		} catch (Exception $e) {
-			dol_syslog('[MCP] Internal error: ' . $e->getMessage(), LOG_ERR);
+		} catch (Throwable $e) {
+			// TypeError and other engine errors are Throwable but not Exception.
+			// Keep the client response generic and avoid logging exception messages,
+			// which may contain business values or user-supplied input.
+			dol_syslog('[MCP] Unhandled failure while processing method ' . substr($method, 0, 100) . ' (' . get_class($e) . ')', LOG_ERR);
 			return $this->errorResponse(-32000, 'Internal server error');
 		}
 	}
