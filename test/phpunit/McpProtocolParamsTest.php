@@ -49,6 +49,38 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		$this->assertStringNotContainsString('method/does-not-exist', json_encode($response));
 	}
 
+	public function testUnknownResourceUriIsNotEchoed(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$uri = 'dolibarr://private/'.str_repeat('x', 200);
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => 3,
+			'method' => 'resources/read',
+			'params' => array('uri' => $uri)
+		));
+
+		$this->assertTrue(is_array($response));
+		$this->assertSame(-32000, $response['error']['code']);
+		$this->assertStringNotContainsString($uri, json_encode($response));
+	}
+
+	public function testUnknownPromptNameIsNotEchoed(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$name = 'private-prompt-'.str_repeat('x', 200);
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => 4,
+			'method' => 'prompts/get',
+			'params' => array('name' => $name)
+		));
+
+		$this->assertTrue(is_array($response));
+		$this->assertSame(-32000, $response['error']['code']);
+		$this->assertStringNotContainsString($name, json_encode($response));
+	}
+
 	public function testMissingIdRemainsNotification(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
