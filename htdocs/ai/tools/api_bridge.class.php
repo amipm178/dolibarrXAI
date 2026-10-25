@@ -1358,7 +1358,7 @@ class ToolApiBridge extends McpTool
 				}
 			}
 		} catch (\Throwable $e) {
-			dol_syslog("[ToolApiBridge] Error during 'addMcpApiBridgeEnrichments' hook execution: ".$e->getMessage(), LOG_ERR);
+			dol_syslog("[ToolApiBridge] Error during 'addMcpApiBridgeEnrichments' hook execution (".get_class($e).")", LOG_ERR);
 		}
 	}
 
