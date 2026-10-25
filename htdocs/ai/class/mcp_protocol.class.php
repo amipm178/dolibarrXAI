@@ -121,22 +121,12 @@ class MCPServer
 		$this->requestId = $request['id'] ?? null;
 		$h = array_change_key_case($headers, CASE_LOWER);
 
-		// Validate request shapes before reading transport metadata. This method
-		// runs before handleRequest() in the HTTP entry point, so it must not
-		// silently coerce malformed params or cast an array protocol version to
-		// a string (which produces warnings and can hide malformed requests).
-		if (array_key_exists('params', $request) && !is_array($request['params'])) {
-			return $this->errorResponse(-32602, 'Invalid params');
-		}
-		$params = $request['params'] ?? array();
-		if (array_key_exists('_meta', $params) && !is_array($params['_meta'])) {
-			return $this->errorResponse(-32602, 'Invalid params');
-		}
-		$meta = $params['_meta'] ?? array();
-		$versionKey = 'io.modelcontextprotocol/protocolVersion';
-		if (array_key_exists($versionKey, $meta) && !is_string($meta[$versionKey])) {
-			return $this->errorResponse(-32602, 'Invalid params');
-		}
+		// This transport check runs before handleRequest() and may inspect
+		// malformed input. Use only correctly typed values here; let the router
+		// return the JSON-RPC Invalid params response so malformed batch items do
+		// not short-circuit the whole batch during transport-header validation.
+		$params = (isset($request['params']) && is_array($request['params'])) ? $request['params'] : array();
+		$meta = (isset($params['_meta']) && is_array($params['_meta'])) ? $params['_meta'] : array();
 
 		// MCP-Protocol-Version header: must be supported, and must match the
 		// per-request _meta value when both are present (schema: RequestMetaObject).
@@ -146,7 +136,7 @@ class MCPServer
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $hver, 'supported' => self::PROTOCOL_VERSIONS));
 			}
-			$mver = isset($meta['io.modelcontextprotocol/protocolVersion']) ? (string) $meta['io.modelcontextprotocol/protocolVersion'] : null;
+			$mver = isset($meta['io.modelcontextprotocol/protocolVersion']) && is_string($meta['io.modelcontextprotocol/protocolVersion']) ? $meta['io.modelcontextprotocol/protocolVersion'] : null;
 			if ($mver !== null && $mver !== $hver) {
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32020, 'MCP-Protocol-Version header does not match request _meta');
@@ -154,13 +144,15 @@ class MCPServer
 		}
 
 		// Mcp-Method: when present, must equal the JSON-RPC method.
-		if (isset($h['mcp-method']) && trim($h['mcp-method']) !== (string) ($request['method'] ?? '')) {
+		$requestMethod = isset($request['method']) && is_string($request['method']) ? $request['method'] : '';
+		if (isset($h['mcp-method']) && trim($h['mcp-method']) !== $requestMethod) {
 			$this->httpStatus = 400;
 			return $this->errorResponse(-32020, 'Mcp-Method header does not match request body method');
 		}
 
 		// Mcp-Name: when present, must equal params.name (tools/call, prompts/get).
-		if (isset($h['mcp-name']) && trim($h['mcp-name']) !== (string) ($params['name'] ?? '')) {
+		$paramName = isset($params['name']) && is_string($params['name']) ? $params['name'] : '';
+		if (isset($h['mcp-name']) && trim($h['mcp-name']) !== $paramName) {
 			$this->httpStatus = 400;
 			return $this->errorResponse(-32020, 'Mcp-Name header does not match request body params.name');
 		}
