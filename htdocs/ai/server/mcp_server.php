@@ -200,16 +200,30 @@ function mcp_log_request(array $req, $resp, float $tStart, string $rawInput): vo
 try {
 	$tStart = microtime(true);
 
-	// Basic payload size limit
+	// Basic payload size limit. Return the correct transport status and
+	// JSON-RPC error directly rather than misreporting these as parse failures.
 	$rawInput = file_get_contents('php://input');
-	if ($rawInput === false || strlen($rawInput) > 1024 * 1024) {
-		throw new Exception("Invalid or too large request");
+	if ($rawInput === false) {
+		http_response_code(400);
+		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32700, "message" => "Parse error")));
+		exit;
+	}
+	if (strlen($rawInput) > 1024 * 1024) {
+		http_response_code(413);
+		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32000, "message" => "Request too large")));
+		exit;
 	}
 
 	$request = json_decode($rawInput, true);
-
 	if (json_last_error() !== JSON_ERROR_NONE) {
-		throw new Exception("Parse Error");
+		http_response_code(400);
+		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32700, "message" => "Parse error")));
+		exit;
+	}
+	if (!is_array($request)) {
+		http_response_code(400);
+		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32600, "message" => "Invalid Request")));
+		exit;
 	}
 
 	$server = new MCPServer($db, $conf, $serviceUser);
@@ -291,26 +305,28 @@ try {
 			}
 		}
 
+		// Log before emitting the response so a logging failure cannot append a
+		// second JSON document to an already-started HTTP response.
+		mcp_log_request($request, $response, $tStart, $rawInput);
+
 		if ($response !== null) {
 			echo json_encode($response);
 		}
-
-		// Log this tools/call to llx_ai_request_log (no-op unless AI_LOG_REQUESTS is enabled
-		// and the method is tools/call).
-		mcp_log_request($request, $response, $tStart, $rawInput);
 	}
-} catch (Exception $e) {
-	dol_syslog(
-		'[MCP Server] Fatal error: ' . $e->getMessage(),
-		LOG_ERR
-	);
+} catch (Throwable $e) {
+	// Do not log exception messages here: they may contain user-controlled
+	// input or business values. Parsing errors are handled explicitly above.
+	dol_syslog('[MCP Server] Unhandled endpoint failure (' . get_class($e) . ')', LOG_ERR);
 
-	echo json_encode([
+	if (!headers_sent()) {
+		http_response_code(500);
+	}
+	echo json_encode(array(
 		"jsonrpc" => "2.0",
 		"id" => null,
-		"error" => [
-			"code" => -32700,
-			"message" => "Parse error"
-		]
-	]);
+		"error" => array(
+			"code" => -32603,
+			"message" => "Internal server error"
+		)
+	));
 }
