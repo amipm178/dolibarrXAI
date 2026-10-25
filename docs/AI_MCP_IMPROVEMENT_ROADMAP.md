@@ -89,16 +89,17 @@ Additional hardening: MCP execution logs now record the tool name and argument k
 
 The continued review identified five additional security/privacy/reliability issues plus one prompt-correctness issue and opened focused draft PRs:
 
-- [PR #2 — MCP native-tool path confinement and execution-log redaction](https://github.com/amipm178/dolibarrXAI/pull/2): the old raw prefix comparison could accept a sibling directory with a matching name prefix; resolved paths are now checked against a directory-separator boundary, including symlink resolution. MCP execution logs record argument keys rather than values.
+- [PR #2 — MCP native-tool path confinement](https://github.com/amipm178/dolibarrXAI/pull/2): the old raw prefix comparison could accept a sibling directory with a matching name prefix; resolved paths are now checked against a directory-separator boundary, including symlink resolution.
 - [PR #3 — MCP audit payload redaction](https://github.com/amipm178/dolibarrXAI/pull/3): when `AI_LOG_REQUESTS` is enabled, the MCP endpoint previously persisted raw request bodies, argument values, result content, and error details. The audit record now keeps bounded metadata (tool name, up to 50 argument keys, result/error status) without storing the payload values.
 - [PR #4 — Internal system tools blocked from external MCP](https://github.com/amipm178/dolibarrXAI/pull/4): `MCPServer::handleToolsList()` calls `McpHandler::getToolsSchema()`, which includes system tools for first-party assistant orchestration. The external MCP context now omits these tools from discovery and rejects direct calls, including tools marked `is_system` only at definition level.
 - [PR #5 — Inventory prompt correctness](https://github.com/amipm178/dolibarrXAI/pull/5): the advertised `inventory_health` prompt referred to a nonexistent `analyze_stock_forecast` tool. It now uses the available product and stock-movement bridge tools, requires ambiguity handling, bounds the movement history, and instructs the model to report insufficient data rather than fabricate a runway estimate. Product names retain accents and non-Latin characters.
 - [PR #6 — Assistant privacy-redaction edge case](https://github.com/amipm178/dolibarrXAI/pull/6): an early local disambiguation path ran before the regular privacy guard, logged the matched phrase, and stored the original query (including restored document blocks). It now logs no matched phrase and stores a generic query marker when privacy redaction is enabled.
 - [PR #7 — JSON-RPC params validation](https://github.com/amipm178/dolibarrXAI/pull/7): malformed scalar `params`, scalar `_meta`, and non-string protocol-version values could reach typed MCP handlers or nested access and cause runtime errors/warnings. The protocol layer now validates these shapes and returns JSON-RPC `-32602 Invalid params` while preserving the explicit unsupported-version response.
+- [PR #8 — Runtime error containment](https://github.com/amipm178/dolibarrXAI/pull/8): the protocol dispatcher caught `Exception` only, so PHP engine failures such as `TypeError` could bypass its generic JSON-RPC error path. It now catches `Throwable`, returns a generic server error, and avoids logging exception messages that may contain sensitive values.
 
 ### Validation status
 
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
 - PHP syntax checks passed for the locally recreated test structures. This is not equivalent to linting the exact GitHub files or running the PHPUnit suite.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
-- All seven PRs remain draft and unmerged. Each requires review and a full test run before release.
+- All eight PRs remain draft and unmerged. Each requires review and a full test run before release.
