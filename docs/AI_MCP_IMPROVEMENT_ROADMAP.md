@@ -51,3 +51,27 @@ This roadmap tracks upstream Dolibarr work relevant to an AI-assisted Dolibarr f
 ## Scope note
 
 This document is an initial engineering triage, not a claim that each upstream issue affects this fork. The code-level audit and test results must establish applicability before implementation.
+
+## Code-level verification (2026-10-25)
+
+The first comparison against upstream `develop` confirms that the fork's core MCP implementation is currently byte-for-byte identical in these files:
+
+- `htdocs/ai/assistant/parse_intent.php` — SHA `66e467004c27dda3fce5ebdd50586aa39538f164`
+- `htdocs/ai/class/privacy_guard.class.php` — SHA `19e2b072c8fc7ea84320ef15a986f4b20a4ecea7`
+- `htdocs/ai/class/mcp.class.php` — SHA `93f1cc04a340dfd89f678d38ec6b2663087cd934`
+- `htdocs/ai/class/mcptool.class.php` — SHA `284aadf26b569568715e0a607d8a368cc6cbc018`
+- `htdocs/ai/tools/api_bridge.class.php` — SHA `8799d8323e435d784d2fab57c913c63985b08d58`
+
+This means these areas do not currently show fork-specific drift; it does **not** mean a runtime or security audit has passed.
+
+### Verified upstream fixes already present
+
+- [Issue #41827 / PR #41996](https://github.com/Dolibarr/dolibarr/pull/41996) — MCP schema normalization converts `const` to `enum` for Gemini compatibility. The `McpTool::normalizeInputSchema()` implementation is present in the fork and matches upstream.
+- [PR #42106](https://github.com/Dolibarr/dolibarr/pull/42106) — clearer MCP write confirmations and validation/precheck improvements; merged upstream.
+- [PR #42086](https://github.com/Dolibarr/dolibarr/pull/42086) — supplier reception and shipment validation behind the write-confirmation gate; merged upstream.
+
+### Backport cautions
+
+- [PR #42210](https://github.com/Dolibarr/dolibarr/pull/42210) and [PR #42211](https://github.com/Dolibarr/dolibarr/pull/42211) target maintenance branch `20.0`, not `develop`. Review their exact affected files and branch applicability before considering any backport; do not assume they are missing from this fork's target branch.
+- No application-code change or test run is claimed by this comparison. Next verification should exercise schema normalization (including nested schemas), write-confirmation denial paths, permission checks, and privacy-redaction behavior with focused PHPUnit tests.
+
