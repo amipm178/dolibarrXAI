@@ -260,7 +260,10 @@ class AiWriteConfirmation
 		unset($normalized['requestState']);
 		$this->ksortRecursive($normalized);
 
-		return dol_hash((string) json_encode($normalized), 'sha256');
+		// serialize() preserves binary strings and PHP value types. json_encode() can
+		// return false for invalid UTF-8; casting that failure to '' would make
+		// every malformed payload share the same confirmation fingerprint.
+		return dol_hash(serialize($normalized), 'sha256');
 	}
 
 	/**
