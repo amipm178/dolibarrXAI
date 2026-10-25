@@ -230,6 +230,32 @@ class MCPServer
 			}
 		}
 
+		// Validate method-specific fields before calling handlers. MCP clients
+		// are untrusted input; typed handlers and string interpolation must not
+		// receive arrays/objects where names or URIs are expected.
+		if ($method === 'initialize' && array_key_exists('protocolVersion', $params) && !is_string($params['protocolVersion'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		if ($method === 'tools/call') {
+			if (!isset($params['name']) || !is_string($params['name']) || trim($params['name']) === '') {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (array_key_exists('arguments', $params) && !is_array($params['arguments'])) {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+		}
+		if ($method === 'resources/read' && (!isset($params['uri']) || !is_string($params['uri']) || trim($params['uri']) === '')) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		if ($method === 'prompts/get') {
+			if (!isset($params['name']) || !is_string($params['name']) || trim($params['name']) === '') {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (array_key_exists('arguments', $params) && !is_array($params['arguments'])) {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+		}
+
 		try {
 			switch ($method) {
 				// --- LIFECYCLE ---
