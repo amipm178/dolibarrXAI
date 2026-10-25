@@ -475,7 +475,7 @@ class MCPServer
 				"login" => $this->user->login
 			];
 		} else {
-			throw new Exception("Resource not found: $uri");
+			throw new Exception("Resource not found");
 		}
 
 		return ['contents' => [[
@@ -567,7 +567,7 @@ class MCPServer
 			];
 		}
 
-		throw new Exception("Prompt not found: $name");
+		throw new Exception("Prompt not found");
 	}
 
 	// --- RESPONSE HELPERS ---
