@@ -87,10 +87,15 @@ class McpLogSanitizer
 				continue;
 			}
 			$value = $request[$key];
-			if ($key === 'id' && (is_int($value) || is_float($value) || $value === null)) {
-				$safe[$key] = $value;
-			} elseif (is_scalar($value)) {
-				$safe[$key] = substr((string) $value, 0, 100);
+			if ($key === 'id') {
+				// String IDs are client-controlled and can contain personal data.
+				// Numeric IDs remain useful for correlating audit events.
+				$safe[$key] = (is_int($value) || is_float($value) || $value === null) ? $value : '[string-id]';
+			} elseif ($key === 'jsonrpc') {
+				$safe[$key] = ($value === '2.0') ? '2.0' : '[invalid]';
+			} elseif ($key === 'method') {
+				$knownMethods = array('server/discover', 'initialize', 'notifications/initialized', 'ping', 'tools/list', 'tools/call', 'resources/list', 'resources/read', 'prompts/list', 'prompts/get');
+				$safe[$key] = (is_string($value) && in_array($value, $knownMethods, true)) ? $value : '[unknown]';
 			} else {
 				$safe[$key] = '[invalid]';
 			}
@@ -99,8 +104,11 @@ class McpLogSanitizer
 		$params = isset($request['params']) && is_array($request['params']) ? $request['params'] : array();
 		if (!empty($params)) {
 			$safe['params'] = array();
-			if (isset($params['name']) && is_scalar($params['name'])) {
-				$safe['params']['name'] = substr((string) $params['name'], 0, 255);
+			if (isset($params['name']) && is_string($params['name'])) {
+				// Keep tool-like identifiers for audit usefulness, but not arbitrary
+				// free text such as a customer name or email address.
+				$name = substr($params['name'], 0, 100);
+				$safe['params']['name'] = preg_match('/^[a-zA-Z][a-zA-Z0-9_]{0,99}$/', $name) ? $name : '[redacted]';
 			}
 			if (array_key_exists('arguments', $params)) {
 				$safe['params']['arguments'] = array(
