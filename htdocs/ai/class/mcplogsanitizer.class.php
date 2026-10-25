@@ -32,7 +32,7 @@ class McpLogSanitizer
 		}
 
 		$keys = array_slice(array_keys($arguments), 0, 50);
-		return array_map(function ($key) { return substr((string) $key, 0, 100); }, $keys);
+		return array_map(function ($key) { return preg_replace('/[\\x00-\\x1F\\x7F]/', '', substr((string) $key, 0, 100)); }, $keys);
 	}
 
 	/**
