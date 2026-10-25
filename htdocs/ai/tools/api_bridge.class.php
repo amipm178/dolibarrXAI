@@ -5261,7 +5261,7 @@ class ToolApiBridge extends McpTool
 		try {
 			require_once $ep['path'];
 			$api = new $ep['class']();
-	
+
 			// Map named MCP args onto the method's positional signature.
 			$rm = new ReflectionMethod($ep['class'], $method);
 			$callArgs = [];
@@ -5342,7 +5342,7 @@ class ToolApiBridge extends McpTool
 					break;
 				}
 			}
-	
+
 			if ($output === null) {
 				// Core can print an error page while refusing access (reproducible on
 				// the REST route): keep it out of the JSON answer, in the log instead.
@@ -5430,24 +5430,24 @@ class ToolApiBridge extends McpTool
 					dol_syslog(get_class($this).'::execute '.$name.' printed output: '.dol_trunc(strip_tags($printed), 200), LOG_WARNING);
 				}
 			}
-	
+
 			// A record read that came back empty is no record.
 			if (!empty($methodmeta['needs_id']) && is_array($output) && !isset($output['error']) && empty($output['id'])) {
 				$output = array('error' => (string) $methodmeta['needs_id'], 'http_status' => 404);
 			}
-	
+
 			// A list the REST method does not bound, and fields that stay on the server.
 			if (is_array($output) && !isset($output['error']) && (!empty($methodmeta['max_items']) || !empty($methodmeta['drop_fields']))) {
 				$output = $this->shapeReadOutput($output, $methodmeta);
 			}
-	
+
 			// Extrafields flagged as personal data (GDPR) must not reach an AI provider.
 			$elementForExtrafields = $this->extrafieldsElementForEndpoint($key);
 			if ($elementForExtrafields !== '' && empty($writemeta['compact_result'])) {
 				require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
 				$output = aiStripPersonalExtrafields($this->db, $output, $elementForExtrafields);
 			}
-	
+
 			return $output;
 		} finally {
 			DolibarrApiAccess::$user = $saveduserapi;
