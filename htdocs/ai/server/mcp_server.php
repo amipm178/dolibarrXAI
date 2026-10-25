@@ -346,6 +346,12 @@ try {
 			}
 		}
 
+		// Streamable HTTP notifications have no JSON-RPC response body and use
+		// 202 Accepted. Transport errors above still produce their explicit error.
+		if ($response === null && $server->getHttpStatus() === 200) {
+			http_response_code(202);
+		}
+
 		// Log before emitting the response so a logging failure cannot append a
 		// second JSON document to an already-started HTTP response.
 		mcp_log_request($request, $response, $tStart);
