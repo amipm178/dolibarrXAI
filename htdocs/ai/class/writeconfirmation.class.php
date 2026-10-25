@@ -77,7 +77,15 @@ class AiWriteConfirmation
 			return '';
 		}
 
-		$state = dol_hash($secret.'|'.$toolName.'|'.$user->id.'|'.dol_now().'|'.microtime(true).'|'.mt_rand(), 'sha256');
+		// Confirmation states are bearer tokens: generate them with a CSPRNG,
+		// not timestamps and mt_rand(), even though the stored lookup is keyed.
+		try {
+			$state = bin2hex(random_bytes(32));
+		} catch (Exception $e) {
+			$this->error = 'Cannot generate a secure confirmation token';
+
+			return '';
+		}
 		$ttl = getDolGlobalInt('AI_WRITE_CONFIRMATION_TTL_MINUTES', self::DEFAULT_TTL_MINUTES);
 		if ($ttl <= 0) {
 			$ttl = self::DEFAULT_TTL_MINUTES;
