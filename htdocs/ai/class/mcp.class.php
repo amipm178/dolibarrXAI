@@ -380,10 +380,12 @@ class McpHandler
 				}
 
 				if ($isSystem) {
-					// Always include system tools but tag them so parse_intent.php
-					// can strip them from $toolsForLLM while keeping them available
-					// for the validation check (executeTool must still be able to
-					// run respond_to_user, ask_for_clarification, etc.).
+					// System tools are internal assistant infrastructure. They remain
+					// available to the web assistant for response validation, but must
+					// never be advertised to or callable by an external MCP client.
+					if ($this->toolcontext === self::CTX_MCP_SERVER) {
+						continue;
+					}
 					$def['is_system']  = true;
 					if (empty($def['categories'])) {
 						$def['categories'] = $tool->getCategories();	// class-level fallback; a tool may set finer per-definition categories
@@ -640,6 +642,14 @@ class McpHandler
 		}
 
 		$toolInstance = $this->toolsByName[$toolName];
+
+		// System tools are only for the first-party assistant orchestration. Do
+		// not allow external MCP clients to invoke them directly, even if a caller
+		// guesses their names or the MCP allow-list is left empty.
+		if ($this->toolcontext === self::CTX_MCP_SERVER && $this->isSystemTool($toolInstance)) {
+			dol_syslog("[McpHandler] Blocked external MCP invocation of internal system tool '".$toolName."'.", LOG_WARNING);
+			return array('error' => "Internal system tools are not available through the MCP server.");
+		}
 
 		// enforce tool context allow-list (system tools always pass through)
 		if (!$this->isSystemTool($toolInstance)) {
