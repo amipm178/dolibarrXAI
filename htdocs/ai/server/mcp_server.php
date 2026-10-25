@@ -250,7 +250,8 @@ try {
 	// Preserve the top-level JSON shape: json_decode(..., true) maps both an
 	// empty JSON object ({}) and an empty JSON array ([]) to an empty PHP array.
 	// The raw first non-whitespace character reliably distinguishes batch input.
-	$isBatch = (isset($rawInput[0]) && ltrim($rawInput) !== '' && ltrim($rawInput)[0] === '[');
+	$trimmedInput = ltrim($rawInput);
+	$isBatch = ($trimmedInput !== '' && $trimmedInput[0] === '[');
 
 	// Batch request handling
 	if ($isBatch && is_array($request)) {
