@@ -87,7 +87,7 @@ Additional hardening: MCP execution logs now record the tool name and argument k
 
 ## Follow-up security audit (2026-10-25)
 
-The continued code review identified three additional MCP security/privacy issues and opened focused draft PRs:
+The continued review identified four additional security/privacy issues plus one prompt-correctness issue and opened focused draft PRs:
 
 - [PR #2 — MCP native-tool path confinement and execution-log redaction](https://github.com/amipm178/dolibarrXAI/pull/2): the old raw prefix comparison could accept a sibling directory with a matching name prefix; resolved paths are now checked against a directory-separator boundary, including symlink resolution. MCP execution logs record argument keys rather than values.
 - [PR #3 — MCP audit payload redaction](https://github.com/amipm178/dolibarrXAI/pull/3): when `AI_LOG_REQUESTS` is enabled, the MCP endpoint previously persisted raw request bodies, argument values, result content, and error details. The audit record now keeps bounded metadata (tool name, up to 50 argument keys, result/error status) without storing the payload values.
@@ -100,4 +100,4 @@ The continued code review identified three additional MCP security/privacy issue
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
 - PHP syntax checks passed for the locally recreated test structures. This is not equivalent to linting the exact GitHub files or running the PHPUnit suite.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
-- All four PRs remain draft and unmerged. Each requires review and a full test run before release.
+- All six PRs remain draft and unmerged. Each requires review and a full test run before release.
