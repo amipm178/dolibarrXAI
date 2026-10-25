@@ -147,7 +147,6 @@ require_once DOL_DOCUMENT_ROOT . '/ai/class/mcplogsanitizer.class.php';
  * @param array<string,mixed>	$req		The JSON-RPC request
  * @param ?mixed				$resp		The JSON-RPC response (null for notifications)
  * @param float					$tStart		microtime(true) captured before processing
- * @param string				$rawInput	Raw request body
  * @return void								No return value, only logs the request
  */
 function mcp_log_request(array $req, $resp, float $tStart): void
