@@ -16,7 +16,7 @@ if (!function_exists('dol_syslog')) {
 }
 require_once DOL_DOCUMENT_ROOT.'/ai/class/mcp_protocol.class.php';
 
-class McpProtocolThrowableTest extends PHPUnit\\Framework\\TestCase
+class McpProtocolThrowableTest extends PHPUnit\Framework\TestCase
 {
 	public function testEngineErrorBecomesGenericJsonRpcError(): void
 	{
