@@ -704,7 +704,9 @@ class McpHandler
 
 		// execute
 		try {
-			dol_syslog("[McpHandler] Executing tool '".$toolName."' with argument keys: ".implode(',', array_keys($args)), LOG_INFO);
+			require_once __DIR__.'/mcplogsanitizer.class.php';
+			$safeArgumentKeys = McpLogSanitizer::argumentKeys($args);
+			dol_syslog("[McpHandler] Executing tool '".$toolName."' with argument keys: ".implode(',', $safeArgumentKeys), LOG_INFO);
 			$missingRight = $this->checkToolRights($toolInstance, $toolName);
 			if ($missingRight !== '') {
 				return array('error' => ($missingRight === 'undeclared')
