@@ -49,7 +49,7 @@ class McpServerInternalToolTestDouble extends McpTool
 	}
 }
 
-class McpServerInternalToolTest extends PHPUnit\\Framework\\TestCase
+class McpServerInternalToolTest extends PHPUnit\Framework\TestCase
 {
 	private function makeHandler($toolName, $systemClass, $systemDefinition)
 	{
