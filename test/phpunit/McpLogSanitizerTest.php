@@ -29,6 +29,18 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 		$this->assertStringNotContainsString('12345', $encoded);
 	}
 
+	public function testResponseAuditRedactsStringRequestIds(): void
+	{
+		$safe = McpLogSanitizer::sanitizeResponse(array(
+			'jsonrpc' => '2.0',
+			'id' => 'person@example.test',
+			'result' => array('isError' => false)
+		));
+
+		$this->assertSame('[string-id]', $safe['id']);
+		$this->assertStringNotContainsString('person@example.test', json_encode($safe));
+	}
+
 	public function testResponseLogsOmitResultContentAndErrorDetails(): void
 	{
 		$response = array(
