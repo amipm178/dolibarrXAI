@@ -45,8 +45,16 @@ class McpLogSanitizer
 	{
 		$safe = array();
 		foreach (array('jsonrpc', 'id', 'method') as $key) {
-			if (array_key_exists($key, $request)) {
-				$safe[$key] = $request[$key];
+			if (!array_key_exists($key, $request)) {
+				continue;
+			}
+			$value = $request[$key];
+			if ($key === 'id' && (is_int($value) || is_float($value) || $value === null)) {
+				$safe[$key] = $value;
+			} elseif (is_scalar($value)) {
+				$safe[$key] = substr((string) $value, 0, 100);
+			} else {
+				$safe[$key] = '[invalid]';
 			}
 		}
 
@@ -54,7 +62,7 @@ class McpLogSanitizer
 		if (!empty($params)) {
 			$safe['params'] = array();
 			if (isset($params['name']) && is_scalar($params['name'])) {
-				$safe['params']['name'] = (string) $params['name'];
+				$safe['params']['name'] = substr((string) $params['name'], 0, 255);
 			}
 			if (array_key_exists('arguments', $params)) {
 				$safe['params']['arguments'] = array(
@@ -81,8 +89,16 @@ class McpLogSanitizer
 
 		$safe = array();
 		foreach (array('jsonrpc', 'id') as $key) {
-			if (array_key_exists($key, $response)) {
-				$safe[$key] = $response[$key];
+			if (!array_key_exists($key, $response)) {
+				continue;
+			}
+			$value = $response[$key];
+			if ($key === 'id' && (is_int($value) || is_float($value) || $value === null)) {
+				$safe[$key] = $value;
+			} elseif (is_scalar($value)) {
+				$safe[$key] = substr((string) $value, 0, 100);
+			} else {
+				$safe[$key] = '[invalid]';
 			}
 		}
 
