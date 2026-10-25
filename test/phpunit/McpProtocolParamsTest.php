@@ -15,6 +15,34 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		return $reflection->newInstanceWithoutConstructor();
 	}
 
+	public function testExplicitNullIdIsNotTreatedAsNotification(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => null,
+			'method' => 'ping',
+			'params' => array()
+		));
+
+		$this->assertIsArray($response);
+		$this->assertArrayHasKey('id', $response);
+		$this->assertNull($response['id']);
+		$this->assertSame('ok', $response['result']['status']);
+	}
+
+	public function testMissingIdRemainsNotification(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'method' => 'ping',
+			'params' => array()
+		));
+
+		$this->assertNull($response);
+	}
+
 	public function testInvalidRequestIdsAreNotEchoed(): void
 	{
 		$invalidIds = array(array('bad-id'), true, false);
