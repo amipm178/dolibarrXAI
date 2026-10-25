@@ -611,8 +611,12 @@ class McpHandler
 		require_once DOL_DOCUMENT_ROOT.'/ai/class/writeconfirmation.class.php';
 		$gate = new AiWriteConfirmation($this->db);
 
-		$state = isset($args['requestState']) ? (string) $args['requestState'] : '';
-		if ($state !== '') {
+		$hasState = array_key_exists('requestState', $args);
+		if ($hasState && (!is_string($args['requestState']) || $args['requestState'] === '')) {
+			return array('error' => 'Invalid confirmation');
+		}
+		$state = $hasState ? $args['requestState'] : '';
+		if ($hasState) {
 			if ($gate->consume($this->user, $toolName, $args, $state)) {
 				return null;	// confirmed: the write runs
 			}
