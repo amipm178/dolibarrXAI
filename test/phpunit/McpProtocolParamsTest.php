@@ -86,6 +86,28 @@ class McpProtocolParamsTest extends PHPUnit\\Framework\\TestCase
 		$this->assertSame(400, $server->getHttpStatus());
 	}
 
+	public function testMethodSpecificValuesMustHaveExpectedTypes(): void
+	{
+		$cases = array(
+			array('method' => 'initialize', 'params' => array('protocolVersion' => array('2026-07-28'))),
+			array('method' => 'tools/call', 'params' => array('name' => array('tool'))),
+			array('method' => 'tools/call', 'params' => array('name' => 'api_products_list', 'arguments' => 'not-an-object')),
+			array('method' => 'resources/read', 'params' => array('uri' => array('dolibarr://company/info'))),
+			array('method' => 'prompts/get', 'params' => array('name' => 'inventory_health', 'arguments' => 'not-an-object'))
+		);
+
+		foreach ($cases as $index => $case) {
+			$server = $this->makeServerWithoutRuntime();
+			$response = $server->handleRequest(array(
+				'jsonrpc' => '2.0',
+				'id' => 20 + $index,
+				'method' => $case['method'],
+				'params' => $case['params']
+			));
+			$this->assertSame(-32602, $response['error']['code'], $case['method']);
+		}
+	}
+
 	public function testTransportValidationRejectsArrayProtocolVersionBeforeCasting(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
