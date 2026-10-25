@@ -96,10 +96,11 @@ The continued review identified five additional security/privacy/reliability iss
 - [PR #6 — Assistant privacy-redaction edge case](https://github.com/amipm178/dolibarrXAI/pull/6): an early local disambiguation path ran before the regular privacy guard, logged the matched phrase, and stored the original query (including restored document blocks). It now logs no matched phrase and stores a generic query marker when privacy redaction is enabled.
 - [PR #7 — JSON-RPC params validation](https://github.com/amipm178/dolibarrXAI/pull/7): malformed scalar `params`, scalar `_meta`, and non-string protocol-version values could reach typed MCP handlers or nested access and cause runtime errors/warnings. The protocol layer now validates these shapes and returns JSON-RPC `-32602 Invalid params` while preserving the explicit unsupported-version response.
 - [PR #8 — Runtime error containment](https://github.com/amipm178/dolibarrXAI/pull/8): the protocol dispatcher caught `Exception` only, so PHP engine failures such as `TypeError` could bypass its generic JSON-RPC error path. It now catches `Throwable`, returns a generic server error, and avoids logging exception messages that may contain sensitive values.
+- [PR #9 — Unconditional API user-context restoration](https://github.com/amipm178/dolibarrXAI/pull/9): `ToolApiBridge::execute()` temporarily replaces the global and REST API user, but the old restoration ran only at the normal end of the method. The new `finally` restores both contexts even if endpoint loading, reflection, hooks, or result shaping throws.
 
 ### Validation status
 
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
 - PHP syntax checks passed for the locally recreated test structures. This is not equivalent to linting the exact GitHub files or running the PHPUnit suite.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
-- All eight PRs remain draft and unmerged. Each requires review and a full test run before release.
+- All nine PRs remain draft and unmerged. Each requires review and a full test run before release.
