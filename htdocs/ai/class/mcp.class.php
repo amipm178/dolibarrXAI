@@ -656,7 +656,7 @@ class McpHandler
 
 		// execute
 		try {
-			dol_syslog('[McpHandler] Executing tool \'' . $toolName . '\' with args: ' . json_encode($args), LOG_INFO);
+			dol_syslog('[McpHandler] Executing tool \' . $toolName . '\' with argument keys: ' . implode(',', array_keys($args)), LOG_INFO);
 			$missingRight = $this->checkToolRights($toolInstance, $toolName);
 			if ($missingRight !== '') {
 				return array('error' => ($missingRight === 'undeclared')
