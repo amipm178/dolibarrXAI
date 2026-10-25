@@ -72,4 +72,22 @@ class McpProtocolParamsTest extends PHPUnit\\Framework\\TestCase
 		$this->assertSame(-32022, $response['error']['code']);
 		$this->assertSame(400, $server->getHttpStatus());
 	}
+
+	public function testTransportValidationRejectsArrayProtocolVersionBeforeCasting(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$response = $server->validateTransportHeaders(
+			array('MCP-Protocol-Version' => '2026-07-28'),
+			array(
+				'id' => 5,
+				'method' => 'ping',
+				'params' => array('_meta' => array(
+					'io.modelcontextprotocol/protocolVersion' => array('2026-07-28')
+				))
+			)
+		);
+
+		$this->assertSame(-32602, $response['error']['code']);
+		$this->assertSame('Invalid params', $response['error']['message']);
+	}
 }
