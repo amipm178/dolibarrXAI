@@ -139,10 +139,10 @@ class McpLogSanitizer
 				continue;
 			}
 			$value = $response[$key];
-			if ($key === 'id' && (is_int($value) || is_float($value) || $value === null)) {
-				$safe[$key] = $value;
-			} elseif (is_scalar($value)) {
-				$safe[$key] = substr((string) $value, 0, 100);
+			if ($key === 'id') {
+				$safe[$key] = (is_int($value) || is_float($value) || $value === null) ? $value : '[string-id]';
+			} elseif ($key === 'jsonrpc') {
+				$safe[$key] = ($value === '2.0') ? '2.0' : '[invalid]';
 			} else {
 				$safe[$key] = '[invalid]';
 			}
