@@ -154,9 +154,6 @@ class ToolApiBridge extends McpTool
 	 * Per method: 'suffix' (tool name suffix, defaults to list/get/lowercased),
 	 * 'description' (appended to the derived tool description), 'params'
 	 * (per-parameter doc overriding what the docblock parser guessed).
-	 * TODO Replace path/class discovery with the dynamic scan of api_*.class.php
-	 * used by api/index.php.
-	 *
 	 * Endpoints are discovered at runtime by discoverEndpoints(); this map only
 	 * carries the hand-written complement for the ones we know well, keyed by
 	 * the same name the scan derives from the file (api_<key>.class.php). An
@@ -5294,9 +5291,9 @@ class ToolApiBridge extends McpTool
 		}
 
 		// --- Authentication bridge (in-process replacement of DolibarrApiAccess::__isAllowed) ---
-		// The API endpoint methods read the authenticated user from DolibarrApiAccess::$user
-		// and their permission checks (hasRight) run against it. TODO: replicate entity
-		// switching for multicompany setups.
+		// The MCP endpoint established its entity context from the explicit API
+		// entity header or the API key owner; assistant calls retain the entity
+		// selected by the Dolibarr session. Keep that context unchanged.
 		$this->loadApiRuntime();
 		// Establish the caller's permission context, the same way the REST entry
 		// point does in api_access.class.php ("Set also the global variable $user

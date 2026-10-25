@@ -11,6 +11,12 @@ if (!function_exists('getDolGlobalString')) {
 		return '';
 	}
 }
+if (!function_exists('dol_syslog')) {
+	function dol_syslog($message, $level = 0)
+	{
+		// The standalone test does not bootstrap Dolibarr's logger.
+	}
+}
 require_once DOL_DOCUMENT_ROOT.'/ai/class/mcp.class.php';
 
 class McpServerInternalToolTestDouble extends McpTool

@@ -112,9 +112,14 @@ class Ai
 
 		$arrayofai = getListOfAIServices();
 
-		// TODO Can store the need for a key into array returned by getListOfAIServices()
-		if (empty($this->apiKey) && in_array($this->apiService, array('chatgpt', 'groq', 'mistral'))) {
+		if (!isset($arrayofai[$this->apiService])) {
+			return array('error' => true, 'message' => 'The configured AI service is not supported.');
+		}
+		if (!empty($arrayofai[$this->apiService]['requires_key']) && empty($this->apiKey)) {
 			return array('error' => true, 'message' => 'API key is not defined for the AI enabled service ('.$this->apiService.')');
+		}
+		if ($function == 'imagegeneration' && !in_array($this->apiService, array('chatgpt', 'google', 'custom'), true)) {
+			return array('error' => true, 'message' => 'Image generation is not supported by the configured AI service ('.$this->apiService.').');
 		}
 
 		// $this->apiEndpoint is already set here only if it was previously forced.
@@ -126,7 +131,9 @@ class Ai
 		// In most cases, it is empty and we must get it from $function and $this->apiService
 		if (empty($this->apiEndpoint)) {
 			// Return the endpoint from $this->apiService.
-			if ($function == 'imagegeneration') {
+			if ($function == 'imagegeneration' && $this->apiService == 'google') {
+				$this->apiEndpoint = rtrim(getDolGlobalString('AI_API_'.strtoupper($this->apiService).'_URL', $arrayofai[$this->apiService]['url']), '/');
+			} elseif ($function == 'imagegeneration') {
 				$this->apiEndpoint = getDolGlobalString('AI_API_'.strtoupper($this->apiService).'_URL', $arrayofai[$this->apiService]['url']);
 				$this->apiEndpoint .= (preg_match('/\/$/', $this->apiEndpoint) ? '' : '/').'images/generations';
 			} elseif ($function == 'audiogeneration') {
@@ -146,7 +153,10 @@ class Ai
 				$this->apiEndpoint .= (preg_match('/\/$/', $this->apiEndpoint) ? '' : '/').'threads';
 			} else {	// if $function == 'docparsing', 'text...', ...
 				$this->apiEndpoint = getDolGlobalString('AI_API_'.strtoupper($this->apiService).'_URL', $arrayofai[$this->apiService]['url']);
-				if ($this->apiService == 'google') {
+				if ($function == 'imagegeneration' && $this->apiService != 'google') {
+					// OpenAI-compatible image generation uses a prompt, not chat messages.
+					$arrayforpayload = array('model' => $model, 'prompt' => $fullInstructions);
+				} elseif ($this->apiService == 'google') {
 					// Google Gemini native API: the /models/<model>:generateContent suffix is
 					// appended later (once $model has been resolved). The OpenAI-style
 					// /chat/completions does not exist on the native Gemini endpoint.
@@ -189,14 +199,15 @@ class Ai
 			$this->apiEndpoint .= '/models/'.rawurlencode($model).':generateContent';
 		}
 
-		dol_syslog("Call API for apiKey=".substr($this->apiKey, 0, 5).'***********, apiEndpoint='.$this->apiEndpoint.", model=".$model.", format=".$format);
+		$apiCallLog = "Call API for service=".$this->apiService.", model=".$model.", format=".$format;
+		dol_syslog($apiCallLog);
 		if (getDolGlobalString("AI_DEBUG")) {
 			if (@is_writable($dolibarr_main_data_root)) {	// Avoid fatal error on fopen with open_basedir
 				$outputfile = $dolibarr_main_data_root."/dolibarr_ai.log";
 				$fp = fopen($outputfile, "w");	// overwrite
 
 				if ($fp) {
-					fwrite($fp, "Call API for apiKey=".substr($this->apiKey, 0, 5).'***********, apiEndpoint='.$this->apiEndpoint.", model=".$model.", format=".$format."\n");
+					fwrite($fp, $apiCallLog."\n");
 					fclose($fp);
 					dolChmod($outputfile);
 				}
@@ -294,7 +305,10 @@ class Ai
 					$prePrompt = ($prePrompt ? $prePrompt.(preg_match('/[\.\!\?]$/', $prePrompt) ? '' : '.').' ' : '').'Today we are '.dol_print_date(dol_now(), 'dayhourtext');
 				}
 
-				if ($this->apiService == 'google') {
+				if ($function == 'imagegeneration' && $this->apiService != 'google') {
+					// OpenAI-compatible image endpoint expects a prompt, not chat messages.
+					$arrayforpayload = array('model' => $model, 'prompt' => $fullInstructions);
+				} elseif ($this->apiService == 'google') {
 					// Google Gemini native payload format (different from OpenAI's "messages").
 					$arrayforpayload = array(
 						'contents' => array(
@@ -305,6 +319,9 @@ class Ai
 						$arrayforpayload['system_instruction'] = array(
 							'parts' => array(array('text' => $prePrompt))
 						);
+					}
+					if ($function == 'imagegeneration') {
+						$arrayforpayload['generationConfig'] = array('responseModalities' => array('IMAGE'));
 					}
 				} else {
 					// OpenAI-compatible payload format (chatgpt, mistral, groq, anthropic-compat, custom, ...)
@@ -364,19 +381,8 @@ class Ai
 					$fp = fopen($outputfile, "a");
 
 					if ($fp) {
-						if ($function == 'docparsing') {
-							fwrite($fp, "Call endpoint ".$this->apiEndpoint." with POST and the following file to upload:\n");
-							fwrite($fp, $instructions."\n");
-						} else {
-							fwrite($fp, "Call endpoint ".$this->apiEndpoint." with POST and the following message:\n");
-							fwrite($fp, $fullInstructions."\n");
-							fwrite($fp, "And prepompt:\n");
-							fwrite($fp, $prePrompt."\n");
-						}
-						fwrite($fp, "HTTP Header\n");
-						fwrite($fp, var_export($headers, true)."\n");
-						fwrite($fp, "Payload\n");
-						fwrite($fp, var_export($payload, true)."\n");
+						$payloadLength = is_string($payload) ? dol_strlen($payload) : dol_strlen((string) json_encode($payload));
+						fwrite($fp, "AI request metadata: service=".$this->apiService." model=".$model." function=".$function." payload_length=".$payloadLength." header_count=".count($headers)."\n");
 
 						fclose($fp);
 						dolChmod($outputfile);
@@ -403,10 +409,16 @@ class Ai
 			if (!empty($response['http_code']) && $response['http_code'] != 200) {
 				if (in_array($response['http_code'], array(400, 401, 403, 429)) && !empty($response['content'])) {
 					$tmp = json_decode($response['content'], true);
-					if (!empty($tmp['message'])) {
+					$providerMessage = '';
+					if (is_array($tmp) && isset($tmp['message']) && is_string($tmp['message'])) {
+						$providerMessage = $tmp['message'];
+					} elseif (is_array($tmp) && isset($tmp['error']['message']) && is_string($tmp['error']['message'])) {
+						$providerMessage = $tmp['error']['message'];
+					}
+					if ($providerMessage !== '') {
 						return array(
 							'error' => true,
-							'message' => $tmp['message'],
+							'message' => $providerMessage,
 							'code' => (empty($response['http_code']) ? 0 : $response['http_code']),
 							'curl_error_no' => (empty($response['curl_error_no']) ? 0 : $response['curl_error_no']),
 							'format' => $format,
@@ -416,7 +428,7 @@ class Ai
 						);
 					}
 				}
-				throw new Exception('API request on AI endpoint '.$this->apiEndpoint.' failed with status code '.$response['http_code']);
+				throw new Exception('AI provider request failed with status code '.$response['http_code']);
 			}
 
 			if (getDolGlobalString("AI_DEBUG")) {
@@ -425,8 +437,7 @@ class Ai
 					$fp = fopen($outputfile, "a");
 
 					if ($fp) {
-						fwrite($fp, "Answer\n");
-						fwrite($fp, var_export((empty($response['content']) ? 'No content result' : $response['content']), true)."\n");
+						fwrite($fp, "AI response metadata: service=".$this->apiService." model=".$model." function=".$function." status=".$response['http_code']." response_length=".dol_strlen((string) ($response['content'] ?? ''))."\n");
 
 						fclose($fp);
 						dolChmod($outputfile);
@@ -437,6 +448,9 @@ class Ai
 
 			// Decode JSON response
 			$decodedResponse = json_decode($response['content'], true);
+			if (!is_array($decodedResponse)) {
+				throw new Exception('AI provider returned an invalid JSON response');
+			}
 
 			// Extraction content
 			if (!empty($decodedResponse['error'])) {
@@ -448,28 +462,66 @@ class Ai
 				} else {
 					$generatedContent = (string) var_export($decodedResponse['error'], true);
 				}
+			} elseif ($function == 'imagegeneration' && $this->apiService == 'google') {
+				$parts = $decodedResponse['candidates'][0]['content']['parts'] ?? null;
+				if (!is_array($parts)) {
+					throw new Exception('AI provider returned no generated image');
+				}
+				$generatedContent = '';
+				foreach ($parts as $part) {
+					if (isset($part['inlineData']['data'], $part['inlineData']['mimeType'])
+						&& is_string($part['inlineData']['data']) && is_string($part['inlineData']['mimeType'])
+						&& in_array($part['inlineData']['mimeType'], array('image/png', 'image/jpeg', 'image/webp'), true)
+						&& preg_match('/^[A-Za-z0-9+\/=]+$/', $part['inlineData']['data'])) {
+						$generatedContent = 'data:'.$part['inlineData']['mimeType'].';base64,'.$part['inlineData']['data'];
+						break;
+					}
+				}
+				if ($generatedContent === '') {
+					throw new Exception('AI provider returned no valid generated image');
+				}
+			} elseif ($function == 'imagegeneration') {
+				$image = $decodedResponse['data'][0] ?? null;
+				if (!is_array($image)) {
+					throw new Exception('AI provider returned no generated image');
+				}
+				if (isset($image['b64_json']) && is_string($image['b64_json']) && preg_match('/^[A-Za-z0-9+\/=]+$/', $image['b64_json'])) {
+					$generatedContent = 'data:image/png;base64,'.$image['b64_json'];
+				} elseif (isset($image['url']) && is_string($image['url'])) {
+					$imageUrl = filter_var($image['url'], FILTER_VALIDATE_URL);
+					$imageScheme = is_string($imageUrl) ? strtolower((string) parse_url($imageUrl, PHP_URL_SCHEME)) : '';
+					if (!$imageUrl || $imageScheme != 'https') {
+						throw new Exception('AI provider returned an invalid image URL');
+					}
+					$generatedContent = $imageUrl;
+				} else {
+					throw new Exception('AI provider returned no valid generated image');
+				}
 			} elseif ($this->apiService == 'google') {
 				// Google Gemini response shape: candidates[0].content.parts[*].text
 				// (parts is an array because Gemini can return mixed-modality output;
 				// we concatenate the textual parts.)
+				$parts = $decodedResponse['candidates'][0]['content']['parts'] ?? null;
+				if (!is_array($parts)) {
+					throw new Exception('AI provider returned an unexpected response structure');
+				}
 				$generatedContent = '';
-				if (!empty($decodedResponse['candidates'][0]['content']['parts'])) {
-					foreach ($decodedResponse['candidates'][0]['content']['parts'] as $part) {
-						if (isset($part['text']) && is_scalar($part['text'])) {
-							$generatedContent .= (string) $part['text'];
-						}
+				foreach ($parts as $part) {
+					if (!is_array($part)) {
+						throw new Exception('AI provider returned an unexpected response structure');
+					}
+					if (isset($part['text']) && is_scalar($part['text'])) {
+						$generatedContent .= (string) $part['text'];
 					}
 				}
 			} else {
 				// A provider answering 200 with a body that does not carry
 				// choices[0].message.content must not reach the code below: reading the missing
-				// keys emits PHP warnings, and a 'choices' entry that is a string instead of an
-				// array raises a TypeError, which the catch below does not take (TypeError
-				// implements Throwable but does not extend Exception) and so ends as a fatal
-				// error on the ajax endpoints calling this method.
+				// keys emits PHP warnings, and malformed nesting can raise a TypeError. The
+				// Throwable handler below converts those failures into a normal API error.
 				if (!isset($decodedResponse['choices'][0]['message']['content'])
 					|| !is_string($decodedResponse['choices'][0]['message']['content'])) {
-					throw new Exception('API response of AI endpoint '.$this->apiEndpoint.' does not contain the expected choices[0].message.content string');
+					throw new Exception('AI provider returned an unexpected response structure');
 				}
 				$generatedContent = $decodedResponse['choices'][0]['message']['content'];
 			}
@@ -478,12 +530,12 @@ class Ai
 			// value is passed to functions declared to take a string.
 			$generatedContent = (string) $generatedContent;
 
-			dol_syslog("ai->generatedContent returned: ".dol_trunc($generatedContent, 50));
+			dol_syslog("ai->generatedContent returned (".dol_strlen($generatedContent)." characters)");
 
 			$this->tokenUsage = $decodedResponse['usage'] ?? null;
 
 			// If content is not HTML, we convert it into HTML
-			if ($format == 'html') {
+			if ($format == 'html' && $function != 'imagegeneration') {
 				if (!dol_textishtml($generatedContent)) {
 					dol_syslog("Result was detected as not HTML so we convert it into HTML.");
 					$generatedContent = dol_nl2br($generatedContent);
@@ -491,24 +543,17 @@ class Ai
 					dol_syslog("Result was detected as already HTML. Do nothing.");
 				}
 
-				// TODO If content is for website module, we must
-				// - clan html header, keep body only and remove ``` ticks added by AI
-				// - add tags <section contenEditable="true"> </section>
 			}
 
 			return $generatedContent;
-		} catch (Exception $e) {
+		} catch (Throwable $e) {
 			$errormessage = $e->getMessage();
-			$errormessagelog = $e->getMessage();
+			$errormessagelog = 'AI request failed: service='.$this->apiService.' model='.$model.' function='.$function.' exception='.get_class($e);
 			if (!empty($response['content'])) {
 				$decodedResponse = json_decode($response['content'], true);
-				$errormessagelog .= ' - '.$response['content'];
-
-				if (!empty($decodedResponse['error']['message'])) {
+				if (is_array($decodedResponse) && isset($decodedResponse['error']['message']) && is_string($decodedResponse['error']['message'])) {
 					// With OpenAI, error is into an object error into the content
 					$errormessage .= ' - '.$decodedResponse['error']['message'];
-				} else {
-					$errormessage .= ' - '.$response['content'];
 				}
 			}
 
@@ -518,7 +563,7 @@ class Ai
 					$fp = fopen($outputfile, "a");
 
 					if ($fp) {
-						fwrite($fp, "Error: ".$errormessagelog."\n");
+						fwrite($fp, $errormessagelog." http_status=".(int) ($response['http_code'] ?? 0)." response_length=".dol_strlen((string) ($response['content'] ?? ''))."\n");
 
 						fclose($fp);
 						dolChmod($outputfile);

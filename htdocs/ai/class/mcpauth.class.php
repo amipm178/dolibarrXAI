@@ -223,13 +223,33 @@ class McpAuth
 			return 1;
 		}
 
-		$userid = $this->fetchUserIdFromApiKey($credential);
-		if ($userid > 0) {
+		$identity = $this->fetchApiKeyIdentity($credential);
+		if (is_array($identity)) {
+			global $conf;
+
+			$targetEntity = defined('DOLENTITY') ? (int) $conf->entity : ((int) $identity['user_entity'] ? (int) $identity['user_entity'] : 1);
+			$tokenEntity = (int) $identity['token_entity'] ? (int) $identity['token_entity'] : 1;
+			if ($targetEntity <= 0 || $tokenEntity !== $targetEntity) {
+				dol_syslog('[MCP Server] Authentication KO: API key is not valid in the selected entity', LOG_NOTICE);
+				$this->error = 'Unauthorized';
+				return -1;
+			}
+			if (!defined('DOLENTITY') && (int) $conf->entity !== $targetEntity && !$this->switchEntityContext($targetEntity)) {
+				$this->error = 'Unauthorized';
+				return -1;
+			}
+
+			$userid = (int) $identity['rowid'];
 			require_once DOL_DOCUMENT_ROOT.'/user/class/user.class.php';
 
 			$tmpuser = new User($this->db);
 			if ($tmpuser->fetch($userid) <= 0) {
 				dol_syslog('[MCP Server] Authentication KO: cannot load user '.$userid, LOG_ERR);
+				$this->error = 'Unauthorized';
+				return -1;
+			}
+			if ($tmpuser->isNotIntoValidityDateRange()) {
+				dol_syslog('[MCP Server] Authentication KO: user id '.$userid.' is outside its validity dates', LOG_NOTICE);
 				$this->error = 'Unauthorized';
 				return -1;
 			}
@@ -283,28 +303,67 @@ class McpAuth
 	}
 
 	/**
-	 * Look up the active user owning this API key.
+	 * Check whether a user may act in the currently selected entity.
 	 *
-	 * The lookup matches the REST API: the key is stored either plain or
-	 * encrypted, and moves to the token table when API_IN_TOKEN_TABLE is set.
-	 * Entity selection is not handled here; MCP requests run in the entity of
-	 * the endpoint, and multicompany switching is a separate piece of work.
+	 * @param User $candidate User selected by AI_MCP_USER_ID
+	 * @return bool True when the user belongs to the selected entity
+	 */
+	public function userCanAccessCurrentEntity($candidate)
+	{
+		global $conf;
+
+		if (!is_object($candidate) || empty($candidate->id)) {
+			return false;
+		}
+		$entity = (int) $conf->entity;
+		if (isModEnabled('multicompany') && getDolGlobalString('MULTICOMPANY_TRANSVERSE_MODE')) {
+			$sql = "SELECT fk_user FROM ".$this->db->prefix()."usergroup_user";
+			$sql .= " WHERE fk_user = ".((int) $candidate->id)." AND entity = ".$entity." LIMIT 1";
+			$resql = $this->db->query($sql);
+			if (!$resql) {
+				return false;
+			}
+			$allowed = $this->db->num_rows($resql) > 0;
+			$this->db->free($resql);
+			return $allowed;
+		}
+
+		$userEntity = isset($candidate->entity) ? (int) $candidate->entity : 0;
+		return ($userEntity > 0 ? $userEntity : 1) === ($entity > 0 ? $entity : 1);
+	}
+
+	/**
+	 * Look up the API-key owner and entity scope, matching the REST API storage format.
 	 *
 	 * @param 	string 	$credential 	Credential presented by the caller
-	 * @return 	int 					User rowid, or 0 when no single active user owns this key
+	 * @return 	array<string,int>|null 	User identity and token entity, or null on failure
 	 */
-	private function fetchUserIdFromApiKey($credential)
+	private function fetchApiKeyIdentity($credential)
 	{
+		global $conf;
+
+		$transverse = isModEnabled('multicompany') && getDolGlobalString('MULTICOMPANY_TRANSVERSE_MODE');
+		$entityJoin = $transverse && defined('DOLENTITY');
+		$entity = (int) $conf->entity;
+
 		if (getDolGlobalString('API_IN_TOKEN_TABLE')) {
-			$sql = "SELECT u.rowid, u.login, u.statut, oat.tokenstring as storedkey";
+			$sql = "SELECT ".($entityJoin ? 'DISTINCT ' : '')."u.rowid, u.login, u.statut, u.entity as user_entity, oat.entity as token_entity, oat.tokenstring as storedkey";
 			$sql .= " FROM ".$this->db->prefix()."oauth_token as oat";
 			$sql .= " INNER JOIN ".$this->db->prefix()."user as u ON u.rowid = oat.fk_user";
+			if ($entityJoin) {
+				$sql .= " INNER JOIN ".$this->db->prefix()."usergroup_user as gu ON gu.fk_user = u.rowid AND gu.entity = ".$entity;
+				$sql .= " AND oat.entity = gu.entity";
+			}
 			$sql .= " WHERE (oat.tokenstring = '".$this->db->escape($credential)."'";
 			$sql .= " OR oat.tokenstring = '".$this->db->escape(dolEncrypt($credential, '', '', 'dolibarr'))."')";
 			$sql .= " AND oat.service = 'dolibarr_rest_api'";
 		} else {
-			$sql = "SELECT u.rowid, u.login, u.statut, u.api_key as storedkey";
+			$tokenEntityField = $entityJoin ? 'gu.entity' : 'u.entity';
+			$sql = "SELECT ".($entityJoin ? 'DISTINCT ' : '')."u.rowid, u.login, u.statut, u.entity as user_entity, ".$tokenEntityField." as token_entity, u.api_key as storedkey";
 			$sql .= " FROM ".$this->db->prefix()."user as u";
+			if ($entityJoin) {
+				$sql .= " INNER JOIN ".$this->db->prefix()."usergroup_user as gu ON gu.fk_user = u.rowid AND gu.entity = ".$entity;
+			}
 			$sql .= " WHERE u.api_key = '".$this->db->escape($credential)."'";
 			$sql .= " OR u.api_key = '".$this->db->escape(dolEncrypt($credential, '', '', 'dolibarr'))."'";
 		}
@@ -313,34 +372,68 @@ class McpAuth
 		if (!$resql) {
 			// Database diagnostics can include SQL or credential-derived values.
 			dol_syslog('[MCP Server] Authentication query failed', LOG_ERR);
-			return 0;
+			return null;
 		}
 		if ($this->db->num_rows($resql) != 1) {
 			// Zero rows is a bad key. More than one means two users share a key,
 			// so there is no single identity to run as and the request is refused.
-			return 0;
+			return null;
 		}
 
 		$obj = $this->db->fetch_object($resql);
 		if (empty($obj)) {
-			return 0;
+			return null;
 		}
 
 		// The SQL already matched the key, so this only guards against a match
 		// that did not come from the value presented (a collation that ignores
 		// case or trailing spaces, for instance).
 		if (!hash_equals((string) dolDecrypt($obj->storedkey), $credential)) {
-			dol_syslog('[MCP Server] Authentication KO: API-key lookup matched user id '.((int) $obj->rowid).' but exact credential comparison failed', LOG_WARNING);
-			return 0;
+			dol_syslog('[MCP Server] Authentication KO: exact API-key comparison failed for user id '.((int) $obj->rowid), LOG_WARNING);
+			return null;
 		}
 
 		if (empty($obj->statut)) {
 			dol_syslog('[MCP Server] Authentication KO: disabled user id '.((int) $obj->rowid).' presented an API key', LOG_NOTICE);
-			return 0;
+			return null;
 		}
 
 		dol_syslog('[MCP Server] Request authenticated for user id '.((int) $obj->rowid), LOG_DEBUG);
 
-		return (int) $obj->rowid;
+		return array('rowid' => (int) $obj->rowid, 'user_entity' => (int) $obj->user_entity, 'token_entity' => (int) $obj->token_entity);
+	}
+
+	/**
+	 * Reload entity-specific configuration when an API key selects its owner's entity.
+	 *
+	 * @param int $entity Entity selected from the authenticated API key
+	 * @return bool True when the context was reloaded
+	 */
+	private function switchEntityContext($entity)
+	{
+		global $conf, $langs, $mysoc, $user;
+
+		$entity = (int) $entity;
+		if ($entity <= 0) {
+			return false;
+		}
+		$conf->entity = $entity;
+		$conf->setValues($this->db);
+
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$mysoc = new Societe($this->db);
+		$mysoc->setMysoc($conf);
+
+		$langcode = getDolGlobalString('MAIN_LANG_DEFAULT', 'auto');
+		if (is_object($user) && !empty($user->conf->MAIN_LANG_DEFAULT)) {
+			$langcode = $user->conf->MAIN_LANG_DEFAULT;
+		}
+		if ($langs->getDefaultLang() != $langcode) {
+			$langs->setDefaultLang($langcode);
+			$langs->tab_translate = array();
+			$langs->loadLangs(array('main'));
+		}
+
+		return true;
 	}
 }

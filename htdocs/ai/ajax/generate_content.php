@@ -41,10 +41,16 @@ if (!defined('NOREQUIREAJAX')) {
 if (!defined('NOREQUIRESOC')) {
 	define('NOREQUIRESOC', '1');
 }
+// The CSRF token is carried in the raw JSON body/header and must be checked below.
+if (!defined('NOCSRFCHECK')) {
+	define('NOCSRFCHECK', '1');
+}
 
 require '../../main.inc.php';
 
 require_once DOL_DOCUMENT_ROOT.'/ai/class/ai.class.php';
+require_once DOL_DOCUMENT_ROOT.'/ai/class/contentnormalizer.class.php';
+require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
 
 /**
  * @var Conf $conf
@@ -58,6 +64,9 @@ if (!isModEnabled('ai')) {
 	accessforbidden('Module AI not enabled');
 }
 
+// This endpoint can incur provider costs, so reject cross-site requests.
+aiCheckCsrfToken('ai/ajax/generate_content.php');
+
 
 /*
  * View
@@ -66,20 +75,55 @@ if (!isModEnabled('ai')) {
 top_httphead();
 
 //get data from AJAX
-$rawData = file_get_contents('php://input');
+$rawData = file_get_contents('php://input', false, null, 0, 1024 * 1024 + 1);
+if ($rawData === false || dol_strlen($rawData) > 1024 * 1024) {
+	http_response_code(413);
+	print 'Error : request too large.';
+	exit;
+}
 $jsonData = json_decode($rawData, true);
 
-if (is_null($jsonData)) {
-	dol_print_error($db, 'data in POST has not a valid JSON format.');
+if (!is_array($jsonData) || !isset($jsonData['instructions']) || !is_string($jsonData['instructions'])) {
+	http_response_code(400);
+	print 'Error : invalid JSON request.';
+	exit;
 }
 $ai = new Ai($db);
 
 // Get parameters
 // Default value is 'textgeneration'.
 // Can also be 'textgeneration', 'textgenerationemail', 'textgenerationwebpage', 'textrephraser', 'textspellchecker', 'imagegeneration', 'videogeneration', ...
+if ((array_key_exists('function', $jsonData) && !is_string($jsonData['function']))
+	|| (array_key_exists('format', $jsonData) && !is_string($jsonData['format']))) {
+	http_response_code(400);
+	print 'Error : invalid function or format.';
+	exit;
+}
+
 $function = empty($jsonData['function']) ? 'textgeneration' : $jsonData['function'];
 
 $format = empty($jsonData['format']) ? '' : $jsonData['format'];						// Can be '' for text, 'html', ...
+
+$availableFeatures = getListOfAIFeatures();
+
+if (!array_key_exists($function, $availableFeatures) || !in_array($format, array('', 'text', 'html'), true)) {
+	http_response_code(400);
+	print 'Error : invalid function or format.';
+	exit;
+}
+
+if (in_array($function, array('videogeneration', 'audiogeneration'), true)) {
+	http_response_code(501);
+	print 'Error : this AI generation feature is not implemented yet.';
+	exit;
+}
+
+if (!in_array($availableFeatures[$function]['status'], array('dolibarr', 'experimental'), true)
+	&& !in_array($function, array('textgeneration', 'imagegeneration'), true)) {
+	http_response_code(400);
+	print 'Error : invalid function or format.';
+	exit;
+}
 
 if ($format == "html") {
 	$instructions = $jsonData['instructions'];
@@ -88,28 +132,35 @@ if ($format == "html") {
 }
 
 
-// Note: The option AI_DEBUG will generate a log file dolibarr_ai.log when calling generateContent()
-dol_syslog("generate_content: function=".$function." format=".$format." instruction=".dol_substr($instructions, 0, 200));
-
-$generatedContent = $ai->generateContent($instructions, 'auto', $function, $format);
-
 if (empty($instructions)) {
 	http_response_code(400);
 	print "Error : empty message.";
-} elseif (is_null($generatedContent) || (is_array($generatedContent) && $generatedContent['error'])) {
+	exit;
+}
+
+// Keep request content out of logs; it can contain personal or confidential data.
+dol_syslog("generate_content: function=".$function." format=".$format." instruction_length=".dol_strlen($instructions));
+
+$generatedContent = $ai->generateContent($instructions, 'auto', $function, $format);
+
+if (!is_array($generatedContent) && $function == 'textgenerationwebpage' && $format == 'html') {
+	$generatedContent = AiContentNormalizer::normalizeWebpage($generatedContent);
+}
+
+if (is_null($generatedContent) || (is_array($generatedContent) && !empty($generatedContent['error']))) {
 	// Output error
 	if (!empty($generatedContent['code']) && $generatedContent['code'] == 429) {
 		http_response_code($generatedContent['code']);
 		print "Quota or allowed period exceeded. Retry Later !";
 	} elseif (!empty($generatedContent['code']) && $generatedContent['code'] >= 400) {
 		http_response_code($generatedContent['code']);
-		print "Error : " . $generatedContent['message'];
+		print "Error : " . dolPrintText((string) $generatedContent['message']);
 		print '<br><a href="'.DOL_MAIN_URL_ROOT.'/ai/admin/setup.php">'.$langs->trans('ErrorGoToModuleSetup').'</a>';
 	} elseif (!empty($generatedContent['message'])) {
 		if (!empty($generatedContent['code'])) {
 			http_response_code($generatedContent['code']);
 		}
-		print "Error returned by API call: " . $generatedContent['message'];
+		print "Error returned by API call: " . dolPrintText((string) $generatedContent['message']);
 	} else {
 		if (!empty($generatedContent['code'])) {
 			http_response_code($generatedContent['code']);
@@ -127,11 +178,12 @@ if (empty($instructions)) {
 			//print dol_string_nohtmltag($generatedContent);
 		}
 	} elseif ($function == 'imagegeneration') {
-		// TODO
-	} elseif ($function == 'videogeneration') {
-		// TODO
-	} elseif ($function == 'audiogeneration') {
-		// TODO
+		if (!preg_match('/^(https:\/\/[^\s"\'<>]+|data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+\/=]+)$/', $generatedContent)) {
+			http_response_code(502);
+			print 'Error : invalid image response.';
+		} else {
+			print $generatedContent;
+		}
 	} else {
 		// Default case 'textgeneration', 'texttranslation', 'textsummarize'
 		if ($format == "html") {

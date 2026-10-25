@@ -26,7 +26,7 @@
 if (!defined('NOTOKENRENEWAL')) {
 	define('NOTOKENRENEWAL', 1);
 }
-if (!defined('NOCSRFCHECK')) {		// TODO Enable the CSRF check
+if (!defined('NOCSRFCHECK')) {		// CSRF validation is performed explicitly below.
 	define('NOCSRFCHECK', 1);
 }
 
@@ -113,15 +113,50 @@ function aiPdfFormatValue($k, $v)
 
 $json = GETPOST('content', 'none');
 if (empty($json)) {
-	$json = file_get_contents('php://input');
+	$json = file_get_contents('php://input', false, null, 0, 5 * 1024 * 1024 + 1);
+}
+if (!is_string($json) || dol_strlen($json) > 5 * 1024 * 1024) {
+	http_response_code(413);
+	print 'Error: request too large.';
+	exit;
 }
 
 // Validate JSON structure
 $data = json_decode($json, true);
-if (json_last_error() !== JSON_ERROR_NONE) {
+if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
 	dol_syslog("Invalid JSON data in PDF generation: " . json_last_error_msg(), LOG_ERR);
 	print "Error: Invalid data format provided.";
 	exit;
+}
+
+// Reject malformed nested report shapes before TCPDF starts rendering them.
+if ((isset($data['customer']) && !is_array($data['customer'])) || (isset($data['details']) && !is_array($data['details']))) {
+	http_response_code(400);
+	print "Error: Invalid data format provided.";
+	exit;
+}
+if (isset($data['details'])) {
+	foreach ($data['details'] as $rows) {
+		if (!is_array($rows)) {
+			continue; // Empty or unavailable section, rendered as "No data available".
+		}
+		foreach ($rows as $row) {
+			if (!is_array($row)) {
+				http_response_code(400);
+				print "Error: Invalid data format provided.";
+				exit;
+			}
+		}
+	}
+}
+if (array_key_exists(0, $data) && is_array($data[0])) {
+	foreach ($data as $row) {
+		if (!is_array($row)) {
+			http_response_code(400);
+			print "Error: Invalid data format provided.";
+			exit;
+		}
+	}
 }
 
 // Get title and filename
@@ -197,7 +232,7 @@ try {
 			if ($k === 'url' || $k === 'id' || $k === 'rowid') {
 				continue;
 			}
-			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst($k)) . '</td><td class="val">' . dol_escape_htmltag($v) . '</td></tr>';
+			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst($k)) . '</td><td class="val">' . dol_escape_htmltag(aiPdfFormatValue((string) $k, $v)) . '</td></tr>';
 		}
 		$html .= '</table>';
 
@@ -292,8 +327,8 @@ try {
 
 	$pdf->writeHTML($html, true, false, true, false, '');
 	$pdf->Output($filename, 'D');
-} catch (Exception $e) {
-	dol_syslog("Error generating PDF: " . $e->getMessage(), LOG_ERR);
+} catch (Throwable $e) {
+	dol_syslog("Error generating PDF: " . get_class($e), LOG_ERR);
 	print "PDF Error: Unable to generate PDF. Please contact administrator.";
 	exit;
 }

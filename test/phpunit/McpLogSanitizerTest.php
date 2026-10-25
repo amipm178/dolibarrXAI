@@ -71,7 +71,7 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 		$safe = McpLogSanitizer::sanitizeRequest($request);
 
 		$this->assertSame('[string-id]', $safe['id']);
-		$this->assertSame(255, strlen($safe['params']['name']));
+		$this->assertSame(100, strlen($safe['params']['name']));
 	}
 
 	public function testArgumentKeyMetadataIsBounded(): void

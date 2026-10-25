@@ -208,7 +208,15 @@ if (GETPOST('action', 'aZ09') === 'suggest') {
 	exit;
 }
 
-$input = json_decode((string) file_get_contents('php://input'), true);
+$maxRequestBytes = 1024 * 1024;
+$rawInput = file_get_contents('php://input', false, null, 0, $maxRequestBytes + 1);
+if ($rawInput === false || strlen($rawInput) > $maxRequestBytes) {
+	http_response_code(413);
+	print json_encode(array('error' => 'Request too large'));
+	$db->close();
+	exit;
+}
+$input = json_decode($rawInput, true);
 $command = is_array($input) ? (string) ($input['command'] ?? '') : '';
 $text = is_array($input) ? trim((string) ($input['text'] ?? '')) : '';
 $context = (is_array($input) && isset($input['context']) && is_array($input['context'])) ? $input['context'] : array();

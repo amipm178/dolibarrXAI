@@ -78,7 +78,16 @@ function aiChatOwnsConversation($db, $user, int $convid): bool
 }
 
 try {
-	$input = json_decode((string) file_get_contents('php://input'), true);
+	// The browser caps saved message fields, but callers can bypass that UI.
+	// Read at most 1 MiB so an authenticated request cannot exhaust memory by
+	// posting an unbounded history payload.
+	$rawInput = file_get_contents('php://input', false, null, 0, 1024 * 1024 + 1);
+	if ($rawInput === false || strlen($rawInput) > 1024 * 1024) {
+		http_response_code(413);
+		echo json_encode(array('error' => 'Request too large'));
+		exit;
+	}
+	$input = json_decode($rawInput, true);
 	if (!is_array($input) || empty($input['action'])) {
 		throw new Exception('Invalid request');
 	}
@@ -191,7 +200,7 @@ try {
 		// turn that must stay out of the context window on reopen, e.g. the
 		// question behind an action the user cancelled.
 		$sql = "UPDATE ".$db->prefix()."ai_chat_message as m";
-		$sql .= " INNER JOIN ".$db->prefix()."ai_chat_conversation as c ON c.rowid = m.fk_conversation AND c.fk_user = ".((int) $user->id);
+		$sql .= " INNER JOIN ".$db->prefix()."ai_chat_conversation as c ON c.rowid = m.fk_conversation AND c.fk_user = ".((int) $user->id)." AND c.entity = ".((int) getEntity('ai'));
 		$sql .= " SET m.pinned = ".((int) $pinned).(isset($input['error']) ? ", m.is_error = ".(empty($input['error']) ? 0 : 1) : "")." WHERE m.rowid = ".((int) $msgid);
 		$resql = $db->query($sql);
 		if (!$resql) {

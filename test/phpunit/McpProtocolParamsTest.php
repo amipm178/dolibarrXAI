@@ -5,6 +5,12 @@
 if (!defined('DOL_DOCUMENT_ROOT')) {
 	define('DOL_DOCUMENT_ROOT', dirname(__DIR__, 2).'/htdocs');
 }
+if (!function_exists('dol_syslog')) {
+	function dol_syslog($message, $level = 0)
+	{
+		// The standalone protocol tests do not bootstrap Dolibarr's logger.
+	}
+}
 require_once DOL_DOCUMENT_ROOT.'/ai/class/mcp_protocol.class.php';
 
 class McpProtocolParamsTest extends PHPUnit\Framework\TestCase

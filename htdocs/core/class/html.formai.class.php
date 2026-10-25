@@ -364,20 +364,20 @@ class FormAI extends Form
 						'instructions': instructions,		/* the prompt string */
 					}),
 					success: function(response) {
-						console.log('Received image URL: '+response);
-
-						// make substitutions
-						let substit = ". json_encode($this->substit).";
-						for (let key in substit) {
-							if (substit.hasOwnProperty(key)) {
-								// Replace the placeholder with its corresponding value
-								response = response.replace(key, substit[key]);
-							}
+						var imageSource = String(response).trim();
+						var isSafeImageData = /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(imageSource);
+						var isSafeImageUrl = false;
+						try {
+							isSafeImageUrl = new URL(imageSource).protocol === 'https:';
+						} catch (error) {
+							isSafeImageUrl = false;
 						}
-
-						// Assuming response is the URL of the generated image
-						var imageUrl = response;
-						$('#ai_image_result').html('<img src=\"' + imageUrl + '\" alt=\"Generated Image\" />');
+						if (!isSafeImageData && !isSafeImageUrl) {
+							$('#ai_status_message'+htmlname).text('Invalid image response.');
+							return;
+						}
+						var imageElement = $('<img>', { alt: 'Generated Image', src: imageSource });
+						$('#ai_image_result').empty().append(imageElement);
 
 						// Clear the input field
 						$('#ai_instructions').val('');

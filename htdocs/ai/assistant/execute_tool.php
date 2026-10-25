@@ -76,7 +76,16 @@ top_httphead('application/json');
 
 
 try {
-	$raw = file_get_contents('php://input');
+	$maxRequestBytes = 1024 * 1024;
+	$raw = file_get_contents('php://input', false, null, 0, $maxRequestBytes + 1);
+	if ($raw === false) {
+		throw new Exception('Unable to read request body.');
+	}
+	if (strlen($raw) > $maxRequestBytes) {
+		http_response_code(413);
+		echo json_encode(array('error' => 'Request too large'));
+		exit;
+	}
 	$input = json_decode($raw, true);
 
 	if (!$input || empty($input['tool'])) {
@@ -91,7 +100,9 @@ try {
 	$tStart = microtime(true);
 
 	if (getDolGlobalString("AI_DEBUG")) {
-		dol_syslog("execute_tool.php tool = ".$input['tool'].", arguments = ".json_encode($input['arguments'] ?? []), LOG_DEBUG, 0, '_ai');
+		$debugTool = is_string($input['tool']) ? preg_replace('/[^a-zA-Z0-9_.-]/', '', $input['tool']) : 'invalid';
+		$debugArguments = isset($input['arguments']) && is_array($input['arguments']) ? count($input['arguments']) : 0;
+		dol_syslog("execute_tool.php tool=".dol_substr($debugTool, 0, 80)." argument_count=".$debugArguments, LOG_DEBUG, 0, '_ai');
 	}
 
 	$result = $mcp->executeTool($input['tool'], $input['arguments'] ?? []);
@@ -128,8 +139,9 @@ try {
 	);
 
 	if (getDolGlobalString("AI_DEBUG")) {
-		dol_syslog("execute_tool.php answer = ".var_export($result, true), LOG_DEBUG, 0, '_ai');
-		dol_syslog("execute_tool.php answer = ".count($result)." lines", LOG_INFO, 0, '_ai');
+		$resultType = is_array($result) ? 'array' : gettype($result);
+		$resultFields = is_array($result) ? count($result) : 0;
+		dol_syslog("execute_tool.php result type=".$resultType." field_count=".$resultFields, LOG_DEBUG, 0, '_ai');
 	}
 
 	echo json_encode($result);

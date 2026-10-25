@@ -182,7 +182,7 @@ class UniversalLLMAdapter
 		$this->lastRequest = $this->encodeRequestForLog($data);
 
 		if (getDolGlobalString("AI_DEBUG")) {
-			dol_syslog('callOpenAI url='.$url, LOG_DEBUG, 0, '_ai');
+			dol_syslog('callOpenAI provider='.$this->type.' model='.$this->model, LOG_DEBUG, 0, '_ai');
 		}
 
 		$answer = $this->curl($url, $data, array("Content-Type: application/json", "Authorization: Bearer " . $this->key));
@@ -457,7 +457,7 @@ class UniversalLLMAdapter
 
 		if (!empty($result['curl_error_no'])) {
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog("Error: cURL #" . $result['curl_error_no'] . " " . $result['curl_error_msg'] . " (url=" . $effectiveUrl . ")", LOG_DEBUG, 0, '_ai');
+				dol_syslog("AI provider transport failed: cURL #" . $result['curl_error_no'], LOG_DEBUG, 0, '_ai');
 			}
 			return "Error: cURL #" . $result['curl_error_no'] . " " . $result['curl_error_msg'] . " (url=" . $effectiveUrl . ")";
 		}
@@ -465,19 +465,17 @@ class UniversalLLMAdapter
 		$json = json_decode($body, true);
 
 		if (getDolGlobalString("AI_DEBUG")) {
-			dol_syslog("curl answer body=" . var_export($body, true), LOG_DEBUG, 0, '_ai');
-			dol_syslog("curl answer json_decoded=" . var_export($json, true), LOG_DEBUG, 0, '_ai');
+			dol_syslog("AI provider response parsed: HTTP=".$httpCode." bytes=".strlen($body)." valid_json=".(is_array($json) ? 1 : 0), LOG_DEBUG, 0, '_ai');
 		}
 
 		if ($json === null && json_last_error() !== JSON_ERROR_NONE) {
-			// Common real-world causes: HTTP 4xx/5xx with empty body, HTML error page
-			// from a proxy, gateway timeout, etc. Surface the HTTP code and a short
-			// body snippet so the admin can diagnose without re-running with curl.
-			$snippet = substr($body, 0, 500);
+			// Common real-world causes include an empty body, a proxy HTML page or
+			// gateway timeout. Keep diagnostics to status and byte length; provider
+			// bodies can contain user text and must not land in server logs.
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog("Error: Invalid JSON response from API (HTTP " . $httpCode . ", " . strlen($body) . " bytes). Body snippet: " . ($snippet !== '' ? $snippet : '<empty>'), LOG_DEBUG, 0, '_ai');
+				dol_syslog("Error: Invalid JSON response from AI provider (HTTP " . $httpCode . ", " . strlen($body) . " bytes)", LOG_DEBUG, 0, '_ai');
 			}
-			return "Error: Invalid JSON response from API (HTTP " . $httpCode . ", " . strlen($body) . " bytes). Body snippet: " . ($snippet !== '' ? $snippet : '<empty>');
+			return "Error: Invalid JSON response from AI provider (HTTP " . $httpCode . ", " . strlen($body) . " bytes)";
 		}
 
 		// Error formats: {"error":{"message":...}} (OpenAI, Anthropic, Gemini) or
@@ -493,7 +491,7 @@ class UniversalLLMAdapter
 			}
 			$this->recordModelFailure($httpCode, (string) $msg);
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog("Error: API " . $msg, LOG_DEBUG, 0, '_ai');
+				dol_syslog("AI provider returned an API error (HTTP ".$httpCode.")", LOG_DEBUG, 0, '_ai');
 			}
 			return "Error: API " . $msg;
 		}

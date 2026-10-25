@@ -40,7 +40,23 @@ if (!defined('NOREQUIREAJAX')) {
 if (!defined('NOCSRFCHECK')) {
 	define('NOCSRFCHECK', 1);
 }
+if (!defined('NOSESSION')) {
+	define('NOSESSION', 1);
+}
 define('NOLOGIN', 1);
+
+// Select an explicit REST-compatible entity before Dolibarr loads its context.
+if (isset($_SERVER['HTTP_DOLAPIENTITY'])) {
+	$requestedEntity = $_SERVER['HTTP_DOLAPIENTITY'];
+	$entityId = is_string($requestedEntity) ? filter_var($requestedEntity, FILTER_VALIDATE_INT, array('options' => array('min_range' => 1))) : false;
+	if ($entityId === false || !preg_match('/^[1-9][0-9]*$/', $requestedEntity)) {
+		header('Content-Type: application/json');
+		http_response_code(400);
+		echo json_encode(array('jsonrpc' => '2.0', 'id' => null, 'error' => array('code' => -32600, 'message' => 'Invalid DOLAPIENTITY header')));
+		exit;
+	}
+	define('DOLENTITY', $entityId);
+}
 
 require '../../main.inc.php';
 /**
@@ -55,17 +71,6 @@ while (ob_get_level()) {
 	ob_end_clean();
 }
 
-// Security check (a test on api_key is also done later)
-if (!isModEnabled('ai') || !getDolGlobalString('AI_MCP_ENABLED')) {
-	http_response_code(503);
-	echo json_encode([
-		"jsonrpc" => "2.0",
-		"error" => ["code" => -32000, "message" => "MCP Server Disabled"]
-	]);
-	exit;
-}
-
-
 /*
  * View
  */
@@ -75,8 +80,8 @@ header('Content-Type: application/json');
 header('X-Content-Type-Options: nosniff');
 
 // Request headers, used by the transport-header validation further down.
-$headers = function_exists('getallheaders') ? getallheaders() : [];
-$headers = array_change_key_case($headers, CASE_LOWER);
+$headers = function_exists('getallheaders') ? getallheaders() : array();
+$headers = is_array($headers) ? array_change_key_case($headers, CASE_LOWER) : array();
 
 $mcpAuth = new McpAuth($db);
 
@@ -91,6 +96,17 @@ if ($mcpAuth->authenticate() < 0) {
 		"jsonrpc" => "2.0",
 		"error" => ["code" => -32000, "message" => $mcpAuth->error]
 	]);
+	exit;
+}
+
+// Key authentication may switch to the owner's entity, so check the module in
+// that resolved context rather than rejecting a key using the bootstrap entity.
+if (!isModEnabled('ai') || !getDolGlobalString('AI_MCP_ENABLED')) {
+	http_response_code(503);
+	echo json_encode(array(
+		'jsonrpc' => '2.0',
+		'error' => array('code' => -32000, 'message' => 'MCP Server Disabled')
+	));
 	exit;
 }
 
@@ -128,6 +144,15 @@ if ($serviceUser === null) {
 			"jsonrpc" => "2.0",
 			"error" => ["code" => -32000, "message" => "MCP Service User is disabled"]
 		]);
+		exit;
+	}
+	if (!$mcpAuth->userCanAccessCurrentEntity($serviceUser)) {
+		dol_syslog('[MCP Server] Shared-key service user is not assigned to the selected entity', LOG_NOTICE);
+		http_response_code(503);
+		echo json_encode(array(
+			'jsonrpc' => '2.0',
+			'error' => array('code' => -32000, 'message' => 'MCP Service User is unavailable for this entity')
+		));
 		exit;
 	}
 	$serviceUser->loadRights();
@@ -219,15 +244,15 @@ function mcp_log_request(array $req, $resp, float $tStart): void
 try {
 	$tStart = microtime(true);
 
-	// Basic payload size limit. Return the correct transport status and
-	// JSON-RPC error directly rather than misreporting these as parse failures.
-	$rawInput = file_get_contents('php://input');
+	// Bound the read itself, before PHP allocates an unbounded request body.
+	$maxRequestBytes = 1024 * 1024;
+	$rawInput = file_get_contents('php://input', false, null, 0, $maxRequestBytes + 1);
 	if ($rawInput === false) {
 		http_response_code(400);
 		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32700, "message" => "Parse error")));
 		exit;
 	}
-	if (strlen($rawInput) > 1024 * 1024) {
+	if (strlen($rawInput) > $maxRequestBytes) {
 		http_response_code(413);
 		echo json_encode(array("jsonrpc" => "2.0", "id" => null, "error" => array("code" => -32000, "message" => "Request too large")));
 		exit;

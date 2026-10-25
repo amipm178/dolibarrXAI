@@ -117,7 +117,8 @@ try {
 	// Input: bound raw JSON before decoding so an authenticated caller cannot
 	// force unbounded memory/CPU use with an oversized request body.
 	$inputStream = fopen('php://input', 'rb');
-	$raw_input = ($inputStream !== false) ? stream_get_contents($inputStream, 2 * 1024 * 1024 + 1) : false;
+	$maxRequestBytes = 16 * 1024 * 1024;
+	$raw_input = ($inputStream !== false) ? stream_get_contents($inputStream, $maxRequestBytes + 1) : false;
 	if (is_resource($inputStream)) {
 		fclose($inputStream);
 	}
@@ -127,7 +128,7 @@ try {
 		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Invalid request body.")));
 		exit;
 	}
-	if (strlen($raw_input) > 2 * 1024 * 1024) {
+	if (strlen($raw_input) > $maxRequestBytes) {
 		http_response_code(413);
 		ob_end_clean();
 		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Request is too large. Please shorten the conversation and try again.")));
@@ -275,16 +276,16 @@ try {
 				}
 				$aiPageContextLine .= ". NEVER ask the user for ids already given here; pass names/refs the user wrote (products, etc.) directly in the matching ref arguments - tools resolve them.";
 				if (getDolGlobalString("AI_DEBUG")) {
-					dol_syslog("AI Pro: page context accepted: ".$ctxElement." #".$ctxId, LOG_INFO, 0, '_ai');
+				dol_syslog("AI Pro: page context accepted for ".$ctxElement, LOG_INFO, 0, '_ai');
 				}
 			} else {
 				if (getDolGlobalString("AI_DEBUG")) {
-					dol_syslog("AI Pro: page context rejected (fetch/entity): ".$ctxElement." #".$ctxId, LOG_WARNING, 0, '_ai');
+				dol_syslog("AI Pro: page context rejected (fetch/entity): ".$ctxElement, LOG_WARNING, 0, '_ai');
 				}
 			}
 		} elseif ($ctxId > 0) {
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog("AI Pro: page context rejected (whitelist/rights): ".$ctxElement." #".$ctxId, LOG_WARNING, 0, '_ai');
+			dol_syslog("AI Pro: page context rejected (whitelist/rights): ".$ctxElement, LOG_WARNING, 0, '_ai');
 			}
 		} elseif (!empty($data['context']['dashboard']) && is_string($data['context']['dashboard'])) {
 			$dash = dol_string_nohtmltag(dol_substr($data['context']['dashboard'], 0, 60));
@@ -454,7 +455,7 @@ try {
 	$dynamicStopWords = array_unique(array_merge($dynamicStopWords, $additionalStopWords, $commonCommands));		// $dynamicStopWords is an array of words
 
 	if (getDolGlobalString("AI_DEBUG")) {
-		dol_syslog("parse_intent.php We have dynamicStopWords: ".implode(',', $dynamicStopWords), LOG_DEBUG, 0, '_ai');
+		dol_syslog("parse_intent.php dynamic stop words prepared: count=".count($dynamicStopWords), LOG_DEBUG, 0, '_ai');
 	}
 
 	// Third parties named in the request, found by matching the text against
@@ -1212,12 +1213,12 @@ try {
 							}
 						}
 						if (count($candidates) === 1) {
-							dol_syslog("parse_intent.php AI Validation: tool '".$intentJSON['tool']."' recovered to '".$candidates[0]."'.", LOG_INFO);
+							dol_syslog("parse_intent.php AI Validation: recovered one near-match for an unknown tool name.", LOG_INFO);
 							$intentJSON['tool'] = $candidates[0];
 						}
 					}
 					if (!in_array($intentJSON['tool'], $validToolNames)) {
-						dol_syslog("parse_intent.php AI Validation: Tool '" . $intentJSON['tool'] . "' not found in filtered schema. Send error message via respond_to_user.", LOG_WARNING);
+						dol_syslog("parse_intent.php AI Validation: unknown tool name was rejected.", LOG_WARNING);
 
 						// Force the standard response for non-existent functionality
 						$intentJSON = [

@@ -50,7 +50,7 @@ function getListOfAIFeatures()
 
 		'textgenerationextrafield' => array('label' => $langs->trans('TextGeneration').' ('.$langs->trans("ExtrafieldFiller").')', 'picto' => '', 'status'=>'dolibarr', 'function' => 'TEXT', 'placeholder' => Ai::AI_DEFAULT_PROMPT_FOR_EXTRAFIELD_FILLER),
 
-		'imagegeneration' => array('label' => 'ImageGeneration', 'picto' => '', 'status' => 'notused', 'function' => 'IMAGE'),
+		'imagegeneration' => array('label' => 'ImageGeneration', 'picto' => '', 'status' => 'dolibarr', 'function' => 'IMAGE'),
 		'videogeneration' => array('label' => 'VideoGeneration', 'picto' => '', 'status' => 'notused', 'function' => 'VIDEO'),
 		'audiogeneration' => array('label' => 'AudioGeneration', 'picto' => '', 'status' => 'notused', 'function' => 'AUDIO'),
 		'transcription' => array('label' => 'AudioTranscription', 'picto' => '', 'status' => 'notused', 'function' => 'TRANSCRIPT'),
@@ -74,6 +74,7 @@ function getListOfAIServices()
 		'-1' => array('label' => $langs->trans('SelectAService')),
 		'chatgpt' => array(
 			'label'           => 'ChatGPT (OpenAI)',
+			'requires_key'    => true,
 			'url'             => 'https://api.openai.com/v1/',
 			'setup'           => 'https://platform.openai.com/account/api-keys',
 			'textgeneration'  => array('default' => 'gpt-5.6'),             //  updated Oct 2026
@@ -87,6 +88,7 @@ function getListOfAIServices()
 		),
 		'groq' => array(
 			'label'           => 'Groq (LPU Inference)',
+			'requires_key'    => true,
 			'url'             => 'https://api.groq.com/openai/v1/',
 			'setup'           => 'https://console.groq.com/keys',
 			'textgeneration'  => array('default' => 'llama-4-8b-instant'),    // February 2026 flagship for extreme speed (1,000+ t/s)
@@ -100,6 +102,7 @@ function getListOfAIServices()
 		),
 		'mistral' => array(
 			'label' => 'Mistral AI',
+			'requires_key' => true,
 			'url' => 'https://api.mistral.ai/v1/',
 			'setup' => 'https://console.mistral.ai/api-keys/',
 			'textgeneration' => array('default' => 'mistral-medium-latest', 'examples' => 'mistral-tiny-latest, mistral-small-latest, mistral-medium-latest, mistral-large-latest'),    // Points to Mistral Small 3 (updated Feb 2026)
@@ -113,6 +116,7 @@ function getListOfAIServices()
 		),
 		'deepseek' => array(
 			'label' => 'DeepSeek',
+			'requires_key' => true,
 			'url' => 'https://api.deepseek.com',
 			'setup' => 'https://platform.deepseek.com/api_keys',
 			'textgeneration' => array('default' => 'deepseek-v4'),             // Released Feb 2026, flagship MoE model
@@ -126,6 +130,7 @@ function getListOfAIServices()
 		),
 		'perplexity' => array(
 			'label' => 'Perplexity (Sonar)',
+			'requires_key' => true,
 			'url' => 'https://api.perplexity.ai',
 			'setup' => 'https://www.perplexity.ai/settings/api',
 			'textgeneration' => array('default' => 'sonar-pro'),               // Flagship search model as of Feb 2026
@@ -139,6 +144,7 @@ function getListOfAIServices()
 		),
 		'zai' => array(
 			'label' => 'Zhipu AI (GLM)',
+			'requires_key' => true,
 			'url' => 'https://api.z.ai/api/paas/v4',
 			'setup' => 'https://docs.z.ai/guides/overview/quick-start',
 			'textgeneration' => array('default' => 'glm-5'),                  // Flagship released February 11, 2026
@@ -166,6 +172,7 @@ function getListOfAIServices()
 		// --- SPECIALIZED ADAPTERS ---
 		'anthropic' => array(
 			'label' => 'Anthropic (Claude)',
+			'requires_key' => true,
 			'url' => 'https://api.anthropic.com/v1/',
 			'setup' => 'https://console.anthropic.com/',
 			'textgeneration' => array('default' => 'claude-opus-5'),    // Current Anthropic flagship; 1M context window
@@ -179,6 +186,7 @@ function getListOfAIServices()
 		),
 		'google' => array(
 			'label' => 'Google Gemini',
+			'requires_key' => true,
 			'url' => 'https://generativelanguage.googleapis.com/v1beta/',
 			'setup' => 'https://aistudio.google.com/',
 			'textgeneration' => array('default' => 'gemini-3.1-pro-preview'), // Flagship reasoning model released Feb 19, 2026
