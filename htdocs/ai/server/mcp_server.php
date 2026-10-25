@@ -136,6 +136,7 @@ $user = $serviceUser;
 // llx_ai_request_log (same table the AI Assistant web UI logs to). This gives
 // administrators a single place to audit external MCP client activity.
 require_once DOL_DOCUMENT_ROOT . '/ai/lib/ai.lib.php';
+require_once DOL_DOCUMENT_ROOT . '/ai/class/mcplogsanitizer.class.php';
 
 /**
  * Persist an MCP tools/call invocation to the llx_ai_request_log table.
@@ -162,24 +163,24 @@ function mcp_log_request(array $req, $resp, float $tStart, string $rawInput): vo
 	$toolName = isset($params['name']) ? (string) $params['name'] : '';
 	$toolArgs = isset($params['arguments']) ? $params['arguments'] : [];
 
-	$argsJson = is_string($toolArgs) ? $toolArgs : (string) json_encode($toolArgs);
-	$query    = '[MCP] ' . $toolName . ' ' . dol_substr($argsJson, 0, 1000);
+	$argumentKeys = McpLogSanitizer::argumentKeys($toolArgs);
+	$query = '[MCP] ' . $toolName . ' argument keys: ' . implode(',', $argumentKeys);
 
-	$responseShape = ['tool' => $toolName, 'arguments' => $toolArgs];
+	// Keep audit metadata, not customer/business values or tool result content.
+	$responseShape = array('tool' => $toolName, 'arguments' => array('keys' => $argumentKeys));
 
-	$status   = 'Success';
+	$status = 'Success';
 	$errorMsg = '';
 	if (is_array($resp) && isset($resp['error'])) {
-		$status   = 'Error';
-		$errorMsg = is_array($resp['error']) && isset($resp['error']['message'])
-			? (string) $resp['error']['message']
-			: (string) json_encode($resp['error']);
-	} elseif (is_array($resp) && isset($resp['result']['isError']) && $resp['result']['isError']) {
-		$status   = 'Error';
-		$errorMsg = is_array($resp['result']['content'] ?? null) ? (string) json_encode($resp['result']['content']) : '';
+		$status = 'Error';
+		$errorMsg = 'MCP request failed; response details redacted';
+	} elseif (is_array($resp) && !empty($resp['result']['isError'])) {
+		$status = 'Error';
+		$errorMsg = 'MCP tool returned an error; response details redacted';
 	}
 
-	$rawResStr = is_string($resp) ? $resp : (string) json_encode($resp);
+	$safeRequest = json_encode(McpLogSanitizer::sanitizeRequest($req));
+	$rawResStr = json_encode(McpLogSanitizer::sanitizeResponse($resp));
 
 	ai_log_request(
 		$db,
@@ -191,7 +192,7 @@ function mcp_log_request(array $req, $resp, float $tStart, string $rawInput): vo
 		1.0,
 		$status,
 		$errorMsg,
-		$rawInput,
+		$safeRequest,
 		$rawResStr
 	);
 }
