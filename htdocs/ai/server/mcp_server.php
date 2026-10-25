@@ -164,10 +164,11 @@ function mcp_log_request(array $req, $resp, float $tStart): void
 	$toolArgs = isset($params['arguments']) ? $params['arguments'] : [];
 
 	$argumentKeys = McpLogSanitizer::argumentKeys($toolArgs);
-	$query = '[MCP] ' . substr($toolName, 0, 255) . ' argument keys: ' . implode(',', $argumentKeys);
+	$safeToolName = substr($toolName, 0, 255);
+	$query = '[MCP] ' . $safeToolName . ' argument keys: ' . implode(',', $argumentKeys);
 
 	// Keep audit metadata, not customer/business values or tool result content.
-	$responseShape = array('tool' => $toolName, 'arguments' => array('keys' => $argumentKeys));
+	$responseShape = array('tool' => $safeToolName, 'arguments' => array('keys' => $argumentKeys));
 
 	$status = 'Success';
 	$errorMsg = '';
