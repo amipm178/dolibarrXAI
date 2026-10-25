@@ -142,3 +142,5 @@ The continued review identified five additional security/privacy/reliability iss
 - Bridge logging: creator-contact failure logs no longer include the business object's raw error string, which may contain SQL fragments or record data; logs retain only stable class/record/role identifiers and the result code. Runtime tests and PHP lint remain pending.
 
 - Bridge logging: unexpected output captured from an in-process REST API call is no longer copied (even truncated) into logs, since it may contain customer data, tokens, SQL errors, or server paths. Logs now record only that unexpected output occurred. Runtime tests and PHP lint remain pending.
+
+- AI debug logging: prompts, user queries, conversation history, cleaned model output and parsed intent/arguments are no longer written verbatim to logs when `AI_DEBUG` is enabled; metadata-only diagnostics remain. Runtime tests and PHP lint remain pending.
