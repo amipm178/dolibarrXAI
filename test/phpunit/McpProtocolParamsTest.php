@@ -45,6 +45,8 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		$this->assertArrayHasKey('id', $response);
 		$this->assertNull($response['id']);
 		$this->assertSame(-32601, $response['error']['code']);
+		$this->assertSame('Method not found', $response['error']['message']);
+		$this->assertStringNotContainsString('method/does-not-exist', json_encode($response));
 	}
 
 	public function testMissingIdRemainsNotification(): void
