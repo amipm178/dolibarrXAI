@@ -139,7 +139,7 @@ class MCPServer
 			$hver = trim($h['mcp-protocol-version']);
 			if (!in_array($hver, self::PROTOCOL_VERSIONS)) {
 				$this->httpStatus = 400;
-				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $hver, 'supported' => self::PROTOCOL_VERSIONS));
+				return $this->errorResponse(-32022, 'Unsupported protocol version', array('supported' => self::PROTOCOL_VERSIONS));
 			}
 			$mver = isset($meta['io.modelcontextprotocol/protocolVersion']) && is_string($meta['io.modelcontextprotocol/protocolVersion']) ? $meta['io.modelcontextprotocol/protocolVersion'] : null;
 			if ($mver !== null && $mver !== $hver) {
@@ -230,7 +230,7 @@ class MCPServer
 			}
 			if (!in_array($reqVer, self::PROTOCOL_VERSIONS, true)) {
 				$this->httpStatus = 400;
-				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $reqVer, 'supported' => self::PROTOCOL_VERSIONS));
+				return $this->errorResponse(-32022, 'Unsupported protocol version', array('supported' => self::PROTOCOL_VERSIONS));
 			}
 		}
 
