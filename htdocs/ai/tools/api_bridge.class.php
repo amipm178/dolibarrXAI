@@ -3342,25 +3342,29 @@ class ToolApiBridge extends McpTool
 			return $this->normaliseUpdateArgs($args, $write);
 		}
 
-		if (isset($args['request_data'])) {
+		if (array_key_exists('request_data', $args)) {
 			$body = $args['request_data'];
 			if (is_string($body)) {
 				$decoded = json_decode($body, true);
-				$body = is_array($decoded) ? $decoded : array();
-			}
-			if (is_array($body)) {
-				// A model may nest the record under a key of its own naming
-				// ({"thirdparty": {...}}): unwrap a lone array value rather than
-				// passing the wrapper to the API, which sees no fields at all.
-				if (count($body) === 1) {
-					$only = reset($body);
-					if (is_array($only) && !isset($body[0])) {
-						$body = $only;
-					}
+				if (json_last_error() !== JSON_ERROR_NONE || !is_array($decoded)) {
+					throw new InvalidArgumentException('request_data must be a valid JSON object');
 				}
-				unset($args['request_data']);
-				$args = array_merge($body, $args);
+				$body = $decoded;
 			}
+			if (!is_array($body)) {
+				throw new InvalidArgumentException('request_data must be a JSON object or object-shaped array');
+			}
+			// A model may nest the record under a key of its own naming
+			// ({\"thirdparty\": {...}}): unwrap a lone array value rather than
+			// passing the wrapper to the API, which sees no fields at all.
+			if (count($body) === 1) {
+				$only = reset($body);
+				if (is_array($only) && !isset($body[0])) {
+					$body = $only;
+				}
+			}
+			unset($args['request_data']);
+			$args = array_merge($body, $args);
 		}
 
 		// A line added to an existing record: its fields come flat, next to the
