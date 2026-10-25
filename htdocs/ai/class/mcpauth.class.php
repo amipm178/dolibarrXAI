@@ -311,7 +311,8 @@ class McpAuth
 
 		$resql = $this->db->query($sql);
 		if (!$resql) {
-			dol_syslog('[MCP Server] Authentication query failed: '.$this->db->lasterror(), LOG_ERR);
+			// Database diagnostics can include SQL or credential-derived values.
+			dol_syslog('[MCP Server] Authentication query failed', LOG_ERR);
 			return 0;
 		}
 		if ($this->db->num_rows($resql) != 1) {
