@@ -188,7 +188,7 @@ abstract class McpTool
 		if (array_key_exists('const', $schema)) {
 			$val = $schema['const'];
 			if (!isset($schema['enum'])) {
-				$schema['enum'] = is_array($val) ? array_values($val) : array($val);
+				$schema['enum'] = array($val);
 			}
 			if (empty($schema['type'])) {
 				if (is_int($val)) {
@@ -200,7 +200,7 @@ abstract class McpTool
 				} elseif (is_string($val)) {
 					$schema['type'] = 'string';
 				} elseif (is_array($val)) {
-					$schema['type'] = (array_keys($val) === range(0, count($val) - 1)) ? 'array' : 'object';
+					$schema['type'] = ($val === array() || array_keys($val) === range(0, count($val) - 1)) ? 'array' : 'object';
 				}
 			}
 			unset($schema['const']);
