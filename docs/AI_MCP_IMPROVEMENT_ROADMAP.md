@@ -80,3 +80,6 @@ This means these areas do not currently show fork-specific drift; it does **not*
 ## Follow-up implementation
 
 A focused fix now updates `McpTool::normalizeInputSchema()` to preserve array-valued `const` values as one enum entry, infer empty-array constants as arrays, and recurse only through schema-bearing keywords. PHPUnit regression cases were added in `test/phpunit/McpToolSchemaTest.php`. The tests have been committed but not executed in a Dolibarr/PHPUnit environment; no CI result is available yet.
+
+
+Additional hardening: MCP execution logs now record the tool name and argument keys, not argument values, to reduce the risk of sensitive business data being copied into application logs.
