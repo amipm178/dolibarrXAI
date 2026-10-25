@@ -102,9 +102,23 @@ class McpHandler
 	 * @param McpTool $toolInstance The tool instance to evaluate.
 	 * @return bool
 	 */
-	private function isSystemTool($toolInstance)
+	private function isSystemTool($toolInstance, $toolName = '')
 	{
-		return (method_exists($toolInstance, 'isSystem') && $toolInstance->isSystem());
+		if (method_exists($toolInstance, 'isSystem') && $toolInstance->isSystem()) {
+			return true;
+		}
+
+		// Compatibility with tool classes that mark individual definitions as
+		// internal without overriding isSystem().
+		if ($toolName !== '') {
+			foreach ($toolInstance->getDefinitions() as $definition) {
+				if (isset($definition['name']) && $definition['name'] === $toolName && !empty($definition['is_system'])) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -374,6 +388,7 @@ class McpHandler
 
 			foreach ($tool->getDefinitions() as $def) {
 				$name = isset($def['name']) ? $def['name'] : '';
+				$isSystem = $this->isSystemTool($tool, $name);
 
 				if (!empty($def['inputSchema']) && is_array($def['inputSchema'])) {
 					$def['inputSchema'] = self::normalizeInputSchema($def['inputSchema']);
@@ -646,7 +661,7 @@ class McpHandler
 		// System tools are only for the first-party assistant orchestration. Do
 		// not allow external MCP clients to invoke them directly, even if a caller
 		// guesses their names or the MCP allow-list is left empty.
-		if ($this->toolcontext === self::CTX_MCP_SERVER && $this->isSystemTool($toolInstance)) {
+		if ($this->toolcontext === self::CTX_MCP_SERVER && $this->isSystemTool($toolInstance, $toolName)) {
 			dol_syslog("[McpHandler] Blocked external MCP invocation of internal system tool '".$toolName."'.", LOG_WARNING);
 			return array('error' => "Internal system tools are not available through the MCP server.");
 		}
