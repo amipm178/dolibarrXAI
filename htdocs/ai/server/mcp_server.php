@@ -150,7 +150,7 @@ require_once DOL_DOCUMENT_ROOT . '/ai/class/mcplogsanitizer.class.php';
  * @param string				$rawInput	Raw request body
  * @return void								No return value, only logs the request
  */
-function mcp_log_request(array $req, $resp, float $tStart, string $rawInput): void
+function mcp_log_request(array $req, $resp, float $tStart): void
 {
 	global $db, $serviceUser;
 
@@ -267,7 +267,7 @@ try {
 			}
 
 			// Log each tools/call separately so the admin log viewer shows them individually.
-			mcp_log_request($req, $res, $reqStart, (string) json_encode($req));
+			mcp_log_request($req, $res, $reqStart);
 		}
 
 		echo json_encode($responses);
@@ -298,7 +298,7 @@ try {
 
 		// Log this tools/call to llx_ai_request_log (no-op unless AI_LOG_REQUESTS is enabled
 		// and the method is tools/call).
-		mcp_log_request($request, $response, $tStart, $rawInput);
+		mcp_log_request($request, $response, $tStart);
 	}
 } catch (Exception $e) {
 	dol_syslog(
