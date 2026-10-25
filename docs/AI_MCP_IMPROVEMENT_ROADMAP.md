@@ -75,3 +75,8 @@ This means these areas do not currently show fork-specific drift; it does **not*
 - [PR #42210](https://github.com/Dolibarr/dolibarr/pull/42210) and [PR #42211](https://github.com/Dolibarr/dolibarr/pull/42211) target maintenance branch `20.0`, not `develop`. Review their exact affected files and branch applicability before considering any backport; do not assume they are missing from this fork's target branch.
 - No application-code change or test run is claimed by this comparison. Next verification should exercise schema normalization (including nested schemas), write-confirmation denial paths, permission checks, and privacy-redaction behavior with focused PHPUnit tests.
 
+
+
+## Follow-up implementation
+
+A focused fix now updates `McpTool::normalizeInputSchema()` to preserve array-valued `const` values as one enum entry, infer empty-array constants as arrays, and recurse only through schema-bearing keywords. PHPUnit regression cases were added in `test/phpunit/McpToolSchemaTest.php`. The tests have been committed but not executed in a Dolibarr/PHPUnit environment; no CI result is available yet.
