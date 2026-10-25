@@ -114,14 +114,32 @@ if ($serviceUser === null) {
 
 	$serviceUser = new User($db);
 	if ($serviceUser->fetch($userId) <= 0) {
-		http_response_code(500);
+		http_response_code(503);
 		echo json_encode([
 			"jsonrpc" => "2.0",
-			"error" => ["code" => -32000, "message" => "MCP Service User not found"]
+			"error" => ["code" => -32000, "message" => "MCP Service User is unavailable"]
+		]);
+		exit;
+	}
+	if (empty($serviceUser->statut)) {
+		dol_syslog('[MCP Server] Shared-key service user is disabled; refusing request.', LOG_NOTICE);
+		http_response_code(503);
+		echo json_encode([
+			"jsonrpc" => "2.0",
+			"error" => ["code" => -32000, "message" => "MCP Service User is disabled"]
 		]);
 		exit;
 	}
 	$serviceUser->loadRights();
+	if (!$serviceUser->hasRight('ai', 'assistant', 'use')) {
+		dol_syslog('[MCP Server] Shared-key service user lacks ai/assistant/use permission; refusing request.', LOG_NOTICE);
+		http_response_code(403);
+		echo json_encode([
+			"jsonrpc" => "2.0",
+			"error" => ["code" => -32000, "message" => "MCP Service User is not allowed to use the AI assistant"]
+		]);
+		exit;
+	}
 }
 
 // Promote the user to the global $user so MCP tools that legitimately rely on
