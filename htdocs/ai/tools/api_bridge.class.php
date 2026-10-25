@@ -3845,7 +3845,7 @@ class ToolApiBridge extends McpTool
 					}
 				}
 			}
-			return $langs->trans($write['preview'], $parent->ref, (string) $context, implode('; ', $changes));
+			return $this->appendWriteDefaultsPreview($langs->trans($write['preview'], $parent->ref, (string) $context, implode('; ', $changes)), $write);
 		}
 
 		try {
@@ -3859,7 +3859,7 @@ class ToolApiBridge extends McpTool
 
 		$kind = (string) ($write['kind'] ?? '');
 		if (in_array($kind, array('update', 'action', 'delete', 'payment'), true)) {
-			return $this->previewTargetWrite($write, $args);
+			return $this->appendWriteDefaultsPreview($this->previewTargetWrite($write, $args), $write);
 		}
 
 		// A line added to an existing record names the product, the record and
@@ -3874,7 +3874,7 @@ class ToolApiBridge extends McpTool
 			$qty = (float) ($args['qty'] ?? 1);
 			$total = $qty * (float) ($args['subprice'] ?? 0) * (1 - (float) ($args['remise_percent'] ?? 0) / 100);
 
-			return $langs->trans($write['preview'], (string) $qty, dol_trunc($what, 60), ($parent ? $parent->ref : ''), price(price2num($total, 'MT')));
+			return $this->appendWriteDefaultsPreview($langs->trans($write['preview'], (string) $qty, dol_trunc($what, 60), ($parent ? $parent->ref : ''), price(price2num($total, 'MT'))), $write);
 		}
 
 		// A single record (third party, product, category, ticket) has no lines:
@@ -3898,7 +3898,7 @@ class ToolApiBridge extends McpTool
 				$extra[] = $argname.'='.dol_trunc($this->previewValue($write, $argname, $argvalue, $args), 40);
 			}
 			$values[] = empty($extra) ? '' : ' ('.implode(', ', $extra).')';
-			return $langs->trans($write['preview'], ...$values);
+			return $this->appendWriteDefaultsPreview($langs->trans($write['preview'], ...$values), $write);
 		}
 
 		$who = '';
@@ -3934,7 +3934,7 @@ class ToolApiBridge extends McpTool
 			$what .= ': '.$this->previewLogisticLines($lines, (string) $write['kind']);
 		}
 
-		return $langs->trans($write['preview'], $who, $what);
+		return $this->appendWriteDefaultsPreview($langs->trans($write['preview'], $who, $what), $write);
 	}
 
 
