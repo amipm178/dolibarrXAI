@@ -29,6 +29,19 @@ class McpProtocolParamsTest extends PHPUnit\\Framework\\TestCase
 		$this->assertSame('Invalid params', $response['error']['message']);
 	}
 
+	public function testExplicitNullParamsReturnInvalidParams(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => 10,
+			'method' => 'ping',
+			'params' => null
+		));
+
+		$this->assertSame(-32602, $response['error']['code']);
+	}
+
 	public function testScalarMetaReturnsInvalidParams(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
