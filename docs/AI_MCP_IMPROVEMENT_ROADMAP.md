@@ -138,3 +138,5 @@ The continued review identified five additional security/privacy/reliability iss
 - **Confirmation-storage log minimization:** database-driver error details are no longer appended to logs when a pending write confirmation cannot be stored. Driver diagnostics can include SQL fragments or values, so the log now records a stable generic failure label. The user-facing failure remains unchanged.
 
 - Write-confirmation token entropy: replace timestamp/`mt_rand()`-derived bearer tokens with 32 bytes from PHP's cryptographically secure `random_bytes()`; token issuance fails closed if secure randomness is unavailable. Runtime tests and PHP lint remain pending.
+
+- Bridge logging: creator-contact failure logs no longer include the business object's raw error string, which may contain SQL fragments or record data; logs retain only stable class/record/role identifiers and the result code. Runtime tests and PHP lint remain pending.
