@@ -70,6 +70,9 @@ class MCPServer
 	/** @var mixed|null The ID from the current JSON-RPC request */
 	private $requestId = null;
 
+	/** @var bool True only when the JSON-RPC request has no id field. */
+	private $isNotification = true;
+
 	/**
 	 * Constructor.
 	 *
@@ -120,6 +123,7 @@ class MCPServer
 	{
 		$id = $request['id'] ?? null;
 		$this->requestId = (is_string($id) || is_int($id) || is_float($id) || $id === null) ? $id : null;
+		$this->isNotification = !array_key_exists('id', $request);
 		$h = array_change_key_case($headers, CASE_LOWER);
 
 		// This transport check runs before handleRequest() and may inspect
@@ -173,6 +177,7 @@ class MCPServer
 	public function handleRequest(array $request): ?array
 	{
 		$id = $request['id'] ?? null;
+		$this->isNotification = !array_key_exists('id', $request);
 		if (array_key_exists('id', $request) && !(is_string($id) || is_int($id) || is_float($id) || $id === null)) {
 			// An invalid ID cannot be echoed back as a JSON-RPC response ID.
 			$this->requestId = null;
@@ -573,7 +578,7 @@ class MCPServer
 	 */
 	private function successResponse($result): ?array
 	{
-		if ($this->requestId === null) {
+		if ($this->isNotification) {
 			return null;
 		}
 
@@ -601,7 +606,7 @@ class MCPServer
 	 */
 	private function errorResponse(int $code, string $message, $data = null): ?array
 	{
-		if ($this->requestId === null) {
+		if ($this->isNotification) {
 			return null;
 		}
 
