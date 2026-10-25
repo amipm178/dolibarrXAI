@@ -617,7 +617,7 @@ class McpHandler
 		}
 		$state = $hasState ? $args['requestState'] : '';
 		if ($hasState) {
-			if ($gate->consume($this->user, $toolName, $args, $state)) {
+			if ($gate->consume($this->user, $toolName, $args, $state, $preview)) {
 				return null;	// confirmed: the write runs
 			}
 

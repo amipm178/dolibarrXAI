@@ -90,6 +90,24 @@ class AiWriteConfirmationTest extends CommonClassTest
 	}
 
 	/**
+	 * A changed business-state preview cannot be approved with an old token.
+	 *
+	 * @return void
+	 */
+	public function testChangedPreviewIsRefusedWithoutConsumingState()
+	{
+		global $db, $user;
+
+		$gate = new AiWriteConfirmation($db);
+		$args = $this->sampleArgs();
+		$state = $gate->issue($user, 'update_customer', $args, 'Change company name from Old to New');
+
+		$this->assertFalse($gate->consume($user, 'update_customer', $args, $state, 'Change company name from Other to New'));
+		$this->assertStringContainsString('changed since it was previewed', $gate->error);
+		$this->assertTrue($gate->consume($user, 'update_customer', $args, $state, 'Change company name from Old to New'), 'a stale-preview rejection must leave the state available for a fresh confirmation flow');
+	}
+
+	/**
 	 * A state the server never issued is refused.
 	 *
 	 * @return void

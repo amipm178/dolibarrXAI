@@ -133,7 +133,7 @@ class AiWriteConfirmation
 	 * @param string $state    State the caller echoed back.
 	 * @return bool True when the write may proceed.
 	 */
-	public function consume($user, $toolName, array $args, $state)
+	public function consume($user, $toolName, array $args, $state, $preview = null)
 	{
 		global $conf;
 
@@ -145,7 +145,7 @@ class AiWriteConfirmation
 			return false;
 		}
 
-		$sql = "SELECT rowid, fk_user, tool_name, args_hash, date_expiration, date_consumed";
+		$sql = "SELECT rowid, fk_user, tool_name, args_hash, preview, date_expiration, date_consumed";
 		$sql .= " FROM ".MAIN_DB_PREFIX."ai_write_confirmation";
 		$sql .= " WHERE state_hash = '".$this->db->escape($this->stateHash($state, $secret))."'";
 		$sql .= " AND entity = ".((int) $conf->entity);
@@ -164,6 +164,8 @@ class AiWriteConfirmation
 			$this->error = 'This confirmation was issued for another action';
 		} elseif ((string) $obj->args_hash !== $this->argsHash($args)) {
 			$this->error = 'The action changed since it was confirmed';
+		} elseif ($preview !== null && (string) $obj->preview !== dol_trunc((string) $preview, 60000, 'right', 'UTF-8', 1)) {
+			$this->error = 'The action changed since it was previewed; ask for confirmation again';
 		} elseif (!empty($obj->date_consumed)) {
 			$this->error = 'This confirmation was already used';
 		} elseif ($this->db->jdate($obj->date_expiration) < dol_now()) {
