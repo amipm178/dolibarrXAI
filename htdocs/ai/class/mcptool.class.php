@@ -188,7 +188,7 @@ abstract class McpTool
 		if (array_key_exists('const', $schema)) {
 			$val = $schema['const'];
 			if (!isset($schema['enum'])) {
-				$schema['enum'] = is_array($val) ? array_values($val) : array($val);
+				$schema['enum'] = array($val);
 			}
 			if (empty($schema['type'])) {
 				if (is_int($val)) {
@@ -200,7 +200,7 @@ abstract class McpTool
 				} elseif (is_string($val)) {
 					$schema['type'] = 'string';
 				} elseif (is_array($val)) {
-					$schema['type'] = (array_keys($val) === range(0, count($val) - 1)) ? 'array' : 'object';
+					$schema['type'] = ($val === array() || array_keys($val) === range(0, count($val) - 1)) ? 'array' : 'object';
 				}
 			}
 			unset($schema['const']);
@@ -209,9 +209,43 @@ abstract class McpTool
 		// Drop keywords known to be rejected by strict LLM function-calling schemas
 		unset($schema['$schema'], $schema['$id']);
 
-		foreach ($schema as $key => $value) {
-			if (is_array($value)) {
-				$schema[$key] = self::normalizeInputSchema($value);
+		// Recurse only into schema-bearing keywords. Data keywords such as
+		// enum, default and examples may contain arbitrary arrays/objects and
+		// must be preserved verbatim.
+		$mapKeywords = array('properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas');
+		foreach ($mapKeywords as $keyword) {
+			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+				foreach ($schema[$keyword] as $name => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$name] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			}
+		}
+		$listKeywords = array('allOf', 'anyOf', 'oneOf', 'prefixItems');
+		foreach ($listKeywords as $keyword) {
+			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+				foreach ($schema[$keyword] as $index => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$index] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			}
+		}
+		$singleKeywords = array('items', 'additionalProperties', 'contains', 'not', 'if', 'then', 'else', 'propertyNames');
+		foreach ($singleKeywords as $keyword) {
+			if (!isset($schema[$keyword]) || !is_array($schema[$keyword])) {
+				continue;
+			}
+			// Older JSON Schema drafts allow tuple validation with items as a list.
+			if ($keyword === 'items' && $schema[$keyword] !== array() && array_keys($schema[$keyword]) === range(0, count($schema[$keyword]) - 1)) {
+				foreach ($schema[$keyword] as $index => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$index] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			} else {
+				$schema[$keyword] = self::normalizeInputSchema($schema[$keyword]);
 			}
 		}
 
