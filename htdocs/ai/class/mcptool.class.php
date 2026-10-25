@@ -209,9 +209,33 @@ abstract class McpTool
 		// Drop keywords known to be rejected by strict LLM function-calling schemas
 		unset($schema['$schema'], $schema['$id']);
 
-		foreach ($schema as $key => $value) {
-			if (is_array($value)) {
-				$schema[$key] = self::normalizeInputSchema($value);
+		// Recurse only into schema-bearing keywords. Data keywords such as
+		// enum, default and examples may contain arbitrary arrays/objects and
+		// must be preserved verbatim.
+		$mapKeywords = array('properties', 'patternProperties', 'definitions', '$defs', 'dependentSchemas');
+		foreach ($mapKeywords as $keyword) {
+			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+				foreach ($schema[$keyword] as $name => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$name] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			}
+		}
+		$listKeywords = array('allOf', 'anyOf', 'oneOf', 'prefixItems');
+		foreach ($listKeywords as $keyword) {
+			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+				foreach ($schema[$keyword] as $index => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$index] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			}
+		}
+		$singleKeywords = array('items', 'additionalProperties', 'contains', 'not', 'if', 'then', 'else', 'propertyNames');
+		foreach ($singleKeywords as $keyword) {
+			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+				$schema[$keyword] = self::normalizeInputSchema($schema[$keyword]);
 			}
 		}
 
