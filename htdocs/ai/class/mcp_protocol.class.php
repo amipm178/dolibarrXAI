@@ -160,7 +160,7 @@ class MCPServer
 	 *
 	 * @param array{jsonrpc?: string, method?: string, params?: array<mixed>, id?: string|int|null} $request The decoded JSON-RPC request array.
 	 * @return array{jsonrpc: string, id: string|int|null, result?: mixed, error?: array<string, mixed>}|null A JSON-RPC response array, or null for notifications.
-	 * @throws Exception On processing errors.
+	 * @throws Throwable On processing errors.
 	 */
 	public function handleRequest(array $request): ?array
 	{
