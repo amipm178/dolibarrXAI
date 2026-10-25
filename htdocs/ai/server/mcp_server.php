@@ -318,7 +318,13 @@ try {
 			mcp_log_request($req, $res, $reqStart);
 		}
 
-		echo json_encode($responses);
+		// A batch made entirely of notifications has no JSON-RPC response.
+		// Streamable HTTP represents that case with 202 and an empty body.
+		if (count($responses) === 0) {
+			http_response_code(202);
+		} else {
+			echo json_encode($responses);
+		}
 	} else {
 		// Single request
 		if (!is_array($request)) {
