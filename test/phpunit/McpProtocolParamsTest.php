@@ -108,21 +108,29 @@ class McpProtocolParamsTest extends PHPUnit\\Framework\\TestCase
 		}
 	}
 
-	public function testTransportValidationRejectsArrayProtocolVersionBeforeCasting(): void
+	public function testTransportValidationDoesNotCoerceArrayProtocolVersion(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
+		$request = array(
+			'id' => 5,
+			'method' => 'ping',
+			'params' => array('_meta' => array(
+				'io.modelcontextprotocol/protocolVersion' => array('2026-07-28')
+			))
+		);
 		$response = $server->validateTransportHeaders(
 			array('MCP-Protocol-Version' => '2026-07-28'),
-			array(
-				'id' => 5,
-				'method' => 'ping',
-				'params' => array('_meta' => array(
-					'io.modelcontextprotocol/protocolVersion' => array('2026-07-28')
-				))
-			)
+			$request
 		);
 
-		$this->assertSame(-32602, $response['error']['code']);
-		$this->assertSame('Invalid params', $response['error']['message']);
+		// The precheck must not coerce malformed metadata or abort a batch.
+		$this->assertNull($response);
+		$dispatchResponse = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => 5,
+			'method' => 'ping',
+			'params' => $request['params']
+		));
+		$this->assertSame(-32602, $dispatchResponse['error']['code']);
 	}
 }
