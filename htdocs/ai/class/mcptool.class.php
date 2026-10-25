@@ -234,7 +234,17 @@ abstract class McpTool
 		}
 		$singleKeywords = array('items', 'additionalProperties', 'contains', 'not', 'if', 'then', 'else', 'propertyNames');
 		foreach ($singleKeywords as $keyword) {
-			if (isset($schema[$keyword]) && is_array($schema[$keyword])) {
+			if (!isset($schema[$keyword]) || !is_array($schema[$keyword])) {
+				continue;
+			}
+			// Older JSON Schema drafts allow tuple validation with items as a list.
+			if ($keyword === 'items' && $schema[$keyword] !== array() && array_keys($schema[$keyword]) === range(0, count($schema[$keyword]) - 1)) {
+				foreach ($schema[$keyword] as $index => $childSchema) {
+					if (is_array($childSchema)) {
+						$schema[$keyword][$index] = self::normalizeInputSchema($childSchema);
+					}
+				}
+			} else {
 				$schema[$keyword] = self::normalizeInputSchema($schema[$keyword]);
 			}
 		}
