@@ -5400,20 +5400,25 @@ class ToolApiBridge extends McpTool
 					}
 				} catch (Throwable $e) {
 					$code = (int) $e->getCode();
-					$message = $e->getMessage();
+					$isRestException = ($e instanceof RestException);
+					// REST exceptions carry deliberate API validation/access messages.
+					// Engine errors and unexpected exceptions can expose SQL, paths or
+					// business values, so return a generic message for those.
+					$message = $isRestException ? $e->getMessage() : 'Internal API error';
 					if ($message === '') {
 						// Core throws bare RestException(403) in places: give the model
 						// something to reason on instead of an empty string.
 						$message = 'Access denied or resource error (HTTP '.($code > 0 ? $code : 500).').';
 					}
 					if (strpos($message, 'Error when validating parameter sqlfilters') === 0) {
-						// The API's own wording ("Bad syntax of the search string: ...")
-						// shows the user a query they never wrote: say what went wrong
-						// and what to do instead.
+						// Never log the rejected filter: it can contain client data.
 						global $langs;
-						dol_syslog(get_class($this).'::execute '.$name.' '.$message, LOG_WARNING);
+						dol_syslog(get_class($this).'::execute '.$name.' rejected sqlfilters input', LOG_WARNING);
 						$langs->load('other');
 						$message = $langs->transnoentitiesnoconv('AIBadSearchFilter');
+					}
+					if (!$isRestException) {
+						dol_syslog(get_class($this).'::execute '.$name.' failed ('.get_class($e).')', LOG_ERR);
 					}
 					$output = [
 						"error" => $message,
