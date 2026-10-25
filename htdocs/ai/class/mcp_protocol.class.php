@@ -194,7 +194,7 @@ class MCPServer
 			return $err;
 		}
 		$method = $request['method'] ?? '';
-		$params = $request['params'] ?? [];
+		$params = array_key_exists('params', $request) ? $request['params'] : [];
 
 		// Per JSON-RPC 2.0 spec, the Server MUST NOT reply to a Notification (no ID).
 		// MCP explicitly requires responses for most methods, so we drop any other notifications.
