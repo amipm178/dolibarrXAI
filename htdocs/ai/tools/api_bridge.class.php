@@ -3937,6 +3937,43 @@ class ToolApiBridge extends McpTool
 		return $langs->trans($write['preview'], $who, $what);
 	}
 
+
+	/**
+	 * Add server-applied defaults to the sentence the human confirms.
+	 *
+	 * Defaults are injected when the REST request is assembled, after the
+	 * preview has been generated. Name them here so the confirmed sentence
+	 * describes fields the API will write even when the caller omitted them.
+	 *
+	 * @param string               $preview Preview sentence.
+	 * @param array<string, mixed> $write   Write metadata.
+	 * @return string Preview with the effective defaults, when any.
+	 */
+	private function appendWriteDefaultsPreview($preview, array $write)
+	{
+		$defaults = (array) ($write['defaults'] ?? array());
+		if (!$defaults) {
+			return $preview;
+		}
+
+		$effective = array();
+		foreach ($defaults as $field => $value) {
+			if ($value === 'now') {
+				$value = dol_print_date(dol_now(), 'day');
+			} elseif ($value === 'me') {
+				$value = 'current user (ID '.((int) ($this->user->id ?? 0)).')';
+			} elseif ($value === 'auto') {
+				$value = 'generated automatically';
+			} elseif (is_bool($value)) {
+				$value = $value ? 'true' : 'false';
+			} elseif (!is_scalar($value) && $value !== null) {
+				$value = 'configured default';
+			}
+			$effective[] = $field.'='.((string) $value);
+		}
+
+		return $preview."\nDefaults applied: ".implode(', ', $effective);
+	}
 	/**
 	 * One value of a confirmation sentence, the way the user knows it: the record
 	 * an id stands for, hours rather than the seconds the API takes, a date as
