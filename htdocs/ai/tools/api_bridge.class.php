@@ -5250,206 +5250,213 @@ class ToolApiBridge extends McpTool
 		// (hooks, triggers, log attribution, another handler) may inherit the
 		// tool's user.
 		$saveduserapi = DolibarrApiAccess::$user;
-		$saveduserglobal = empty($GLOBALS['user']) ? null : $GLOBALS['user'];
+		$hadGlobalUser = array_key_exists('user', $GLOBALS);
+		$saveduserglobal = $hadGlobalUser ? $GLOBALS['user'] : null;
 		DolibarrApiAccess::$user = $this->user;
 		$GLOBALS['user'] = $this->user;
 
-		require_once $ep['path'];
-		$api = new $ep['class']();
+		// Restore both user contexts even if endpoint loading, reflection,
+		// argument mapping, output shaping, or a hook throws before the API-call
+		// try/catch below is reached.
+		try {
+			require_once $ep['path'];
+			$api = new $ep['class']();
 
-		// Map named MCP args onto the method's positional signature.
-		$rm = new ReflectionMethod($ep['class'], $method);
-		$callArgs = [];
-		$output = null;
-		foreach ($rm->getParameters() as $p) {
-			$pname = $p->getName();
-			// A write method takes the record as one body parameter. The tool
-			// advertises the fields flat, because that is what a model fills
-			// in, so the body is rebuilt here from everything it sent.
-			if ($pname === 'request_data') {
-				if (!empty($writemeta['update'])) {
-					$callArgs[] = array_intersect_key($args, $writemeta['update']);
+			// Map named MCP args onto the method's positional signature.
+			$rm = new ReflectionMethod($ep['class'], $method);
+			$callArgs = [];
+			$output = null;
+			foreach ($rm->getParameters() as $p) {
+				$pname = $p->getName();
+				// A write method takes the record as one body parameter. The tool
+				// advertises the fields flat, because that is what a model fills
+				// in, so the body is rebuilt here from everything it sent.
+				if ($pname === 'request_data') {
+					if (!empty($writemeta['update'])) {
+						$callArgs[] = array_intersect_key($args, $writemeta['update']);
+						continue;
+					}
+					$body = $args;
+					unset($body['requestState']);
+					// Only the fields the tool advertised may be written: the human
+					// approved a preview of those, not of arbitrary object properties
+					// (a ticket update must not rewrite track_id, fk_user_create,
+					// origin_email, dates...). 'parent' writes keep the flat line
+					// fields, which are not individually declared in 'params'.
+					if (!empty($writemeta) && empty($writemeta['parent']) && !empty($methodmeta['params'])) {
+						$body = array_intersect_key($body, $methodmeta['params']);
+					}
+					// An update writes the allowed fields it was given, nothing else.
+					if ($writekind === 'update') {
+						$body = array_intersect_key($args, array_flip((array) $writemeta['fields']));
+					}
+					foreach (array_keys($body) as $field) {
+						if (substr((string) $field, 0, 1) === '_') {
+							unset($body[$field]);
+						}
+					}
+					foreach (($writemeta['defaults'] ?? array()) as $field => $default) {
+						if (!isset($body[$field])) {
+							if ($default === 'now') {
+								$default = dol_now();
+							} elseif ($default === 'me') {
+								$default = (int) $this->user->id;
+							}
+							$body[$field] = $default;
+						}
+					}
+					// Fields named the common way up to here, renamed for an
+					// endpoint that reads them under another name.
+					foreach (($writemeta['rename'] ?? array()) as $from => $to) {
+						if (array_key_exists($from, $body) && !isset($body[$to])) {
+							$body[$to] = $body[$from];
+							unset($body[$from]);
+						}
+					}
+					// Fields the object persists under another name while the API
+					// still validates the documented one (the ticket API checks
+					// access on 'socid' but Ticket::create/update write 'fk_soc').
+					foreach (($writemeta['copy'] ?? array()) as $from => $to) {
+						if (isset($body[$from])) {
+							$body[$to] = $body[$from];
+						}
+					}
+					$callArgs[] = $body;
 					continue;
 				}
-				$body = $args;
-				unset($body['requestState']);
-				// Only the fields the tool advertised may be written: the human
-				// approved a preview of those, not of arbitrary object properties
-				// (a ticket update must not rewrite track_id, fk_user_create,
-				// origin_email, dates...). 'parent' writes keep the flat line
-				// fields, which are not individually declared in 'params'.
-				if (!empty($writemeta) && empty($writemeta['parent']) && !empty($methodmeta['params'])) {
-					$body = array_intersect_key($body, $methodmeta['params']);
+				// A write tool advertises a flat schema: only the declared arguments
+				// may reach a positional parameter (a caller must not fill
+				// 'notrigger' or any other option the schema never showed). A write
+				// on an existing record is the exception: its arguments were rebuilt
+				// from scratch by normaliseTargetArgs(), with the options fixed there.
+				if (array_key_exists($pname, $args)
+					&& (empty($writemeta) || empty($methodmeta['params']) || array_key_exists($pname, $methodmeta['params'])
+						|| in_array($writekind, array('update', 'action', 'delete', 'payment'), true))) {
+					// Cap an explicit 'limit': one call must not pull thousands of full objects.
+					$callArgs[] = ($pname == 'limit') ? min((int) $args[$pname], self::BRIDGE_MAX_LIMIT) : $args[$pname];
+				} elseif ($p->isOptional()) {
+					// Bridge default for an omitted 'limit' is smaller than the API's 100.
+					$callArgs[] = ($pname == 'limit') ? self::BRIDGE_DEFAULT_LIMIT : $p->getDefaultValue();
+				} else {
+					$output = ["error" => "Missing required parameter '$pname'."];
+					break;
 				}
-				// An update writes the allowed fields it was given, nothing else.
-				if ($writekind === 'update') {
-					$body = array_intersect_key($args, array_flip((array) $writemeta['fields']));
-				}
-				foreach (array_keys($body) as $field) {
-					if (substr((string) $field, 0, 1) === '_') {
-						unset($body[$field]);
-					}
-				}
-				foreach (($writemeta['defaults'] ?? array()) as $field => $default) {
-					if (!isset($body[$field])) {
-						if ($default === 'now') {
-							$default = dol_now();
-						} elseif ($default === 'me') {
-							$default = (int) $this->user->id;
-						}
-						$body[$field] = $default;
-					}
-				}
-				// Fields named the common way up to here, renamed for an
-				// endpoint that reads them under another name.
-				foreach (($writemeta['rename'] ?? array()) as $from => $to) {
-					if (array_key_exists($from, $body) && !isset($body[$to])) {
-						$body[$to] = $body[$from];
-						unset($body[$from]);
-					}
-				}
-				// Fields the object persists under another name while the API
-				// still validates the documented one (the ticket API checks
-				// access on 'socid' but Ticket::create/update write 'fk_soc').
-				foreach (($writemeta['copy'] ?? array()) as $from => $to) {
-					if (isset($body[$from])) {
-						$body[$to] = $body[$from];
-					}
-				}
-				$callArgs[] = $body;
-				continue;
 			}
-			// A write tool advertises a flat schema: only the declared arguments
-			// may reach a positional parameter (a caller must not fill
-			// 'notrigger' or any other option the schema never showed). A write
-			// on an existing record is the exception: its arguments were rebuilt
-			// from scratch by normaliseTargetArgs(), with the options fixed there.
-			if (array_key_exists($pname, $args)
-				&& (empty($writemeta) || empty($methodmeta['params']) || array_key_exists($pname, $methodmeta['params'])
-					|| in_array($writekind, array('update', 'action', 'delete', 'payment'), true))) {
-				// Cap an explicit 'limit': one call must not pull thousands of full objects.
-				$callArgs[] = ($pname == 'limit') ? min((int) $args[$pname], self::BRIDGE_MAX_LIMIT) : $args[$pname];
-			} elseif ($p->isOptional()) {
-				// Bridge default for an omitted 'limit' is smaller than the API's 100.
-				$callArgs[] = ($pname == 'limit') ? self::BRIDGE_DEFAULT_LIMIT : $p->getDefaultValue();
-			} else {
-				$output = ["error" => "Missing required parameter '$pname'."];
-				break;
-			}
-		}
 
-		if ($output === null) {
-			// Core can print an error page while refusing access (reproducible on
-			// the REST route): keep it out of the JSON answer, in the log instead.
-			ob_start();
-			try {
-				$result = call_user_func_array([$api, $method], $callArgs);
-				// Serialize API return (cleaned objects) into plain arrays for the MCP client.
-				$output = json_decode(json_encode($result), true);
-				if (in_array($writekind, array('update', 'action', 'delete', 'payment'), true)) {
-					// The record the user named, under its ref (a new one once
-					// validated), rather than the whole object the API returns.
-					$targetid = (int) ($args[$writemeta['target'] ?? 'id'] ?? 0);
-					$done = array('success' => true, 'id' => $targetid);
-					if ($writekind === 'payment') {
-						$done['payment_id'] = (int) $result;
-					}
-					$ref = ($writekind === 'delete') ? $refbefore : $this->refOfCreatedObject((string) $writemeta['object'], $targetid);
-					// Some REST deletes answer success when core failed: check.
-					if ($writekind === 'delete' && $this->fetchRecord((string) $writemeta['object'], $targetid)) {
-						$done = array('error' => 'The '.$writemeta['label'].' '.$refbefore.' could not be deleted.', 'http_status' => 500);
-						dol_syslog(get_class($this).'::execute '.$name.' reported success but the record is still there', LOG_ERR);
-					}
-					if ($ref !== '') {
-						$done['ref'] = $ref;
-					}
-					$output = $done;
-				} elseif (!empty($writemeta['compact_result'])) {
-					if (!is_array($output) || (int) ($output['id'] ?? 0) !== (int) $args[$writemeta['parent']] || !is_string($output['ref'] ?? null) || $output['ref'] === '') {
-						throw new RuntimeException('The API did not return the updated record');
-					}
-					$output = ['success' => true, 'id' => (int) $output['id'], 'ref' => $output['ref']];
-				} elseif (!is_array($output)) {
-					// A create returns the new rowid as a scalar: name it, so the
-					// caller gets the same shape as any other tool result.
-					$output = array('success' => true, 'id' => (int) $output);
-					// A line write returns the rowid of the new line: the record it
-					// went into is what the user knows.
-					if (!empty($writemeta['parent'])) {
-						$output = array('success' => true, 'line_id' => (int) $output['id'], 'id' => (int) ($args[$writemeta['parent']] ?? 0));
-					}
-					// Name what was written: an id alone tells the user nothing, and
-					// the ref is what they see on the document itself.
-					if (!empty($writemeta['object']) && $output['id'] > 0) {
-						$ref = $this->refOfCreatedObject($writemeta['object'], $output['id']);
+			if ($output === null) {
+				// Core can print an error page while refusing access (reproducible on
+				// the REST route): keep it out of the JSON answer, in the log instead.
+				ob_start();
+				try {
+					$result = call_user_func_array([$api, $method], $callArgs);
+					// Serialize API return (cleaned objects) into plain arrays for the MCP client.
+					$output = json_decode(json_encode($result), true);
+					if (in_array($writekind, array('update', 'action', 'delete', 'payment'), true)) {
+						// The record the user named, under its ref (a new one once
+						// validated), rather than the whole object the API returns.
+						$targetid = (int) ($args[$writemeta['target'] ?? 'id'] ?? 0);
+						$done = array('success' => true, 'id' => $targetid);
+						if ($writekind === 'payment') {
+							$done['payment_id'] = (int) $result;
+						}
+						$ref = ($writekind === 'delete') ? $refbefore : $this->refOfCreatedObject((string) $writemeta['object'], $targetid);
+						// Some REST deletes answer success when core failed: check.
+						if ($writekind === 'delete' && $this->fetchRecord((string) $writemeta['object'], $targetid)) {
+							$done = array('error' => 'The '.$writemeta['label'].' '.$refbefore.' could not be deleted.', 'http_status' => 500);
+							dol_syslog(get_class($this).'::execute '.$name.' reported success but the record is still there', LOG_ERR);
+						}
 						if ($ref !== '') {
-							$output['ref'] = $ref;
+							$done['ref'] = $ref;
 						}
-						if (!empty($writemeta['creator_contact'])) {
-							$this->addCreatorContact((string) $writemeta['object'], (int) $output['id'], (string) $writemeta['creator_contact']);
+						$output = $done;
+					} elseif (!empty($writemeta['compact_result'])) {
+						if (!is_array($output) || (int) ($output['id'] ?? 0) !== (int) $args[$writemeta['parent']] || !is_string($output['ref'] ?? null) || $output['ref'] === '') {
+							throw new RuntimeException('The API did not return the updated record');
+						}
+						$output = ['success' => true, 'id' => (int) $output['id'], 'ref' => $output['ref']];
+					} elseif (!is_array($output)) {
+						// A create returns the new rowid as a scalar: name it, so the
+						// caller gets the same shape as any other tool result.
+						$output = array('success' => true, 'id' => (int) $output);
+						// A line write returns the rowid of the new line: the record it
+						// went into is what the user knows.
+						if (!empty($writemeta['parent'])) {
+							$output = array('success' => true, 'line_id' => (int) $output['id'], 'id' => (int) ($args[$writemeta['parent']] ?? 0));
+						}
+						// Name what was written: an id alone tells the user nothing, and
+						// the ref is what they see on the document itself.
+						if (!empty($writemeta['object']) && $output['id'] > 0) {
+							$ref = $this->refOfCreatedObject($writemeta['object'], $output['id']);
+							if ($ref !== '') {
+								$output['ref'] = $ref;
+							}
+							if (!empty($writemeta['creator_contact'])) {
+								$this->addCreatorContact((string) $writemeta['object'], (int) $output['id'], (string) $writemeta['creator_contact']);
+							}
 						}
 					}
+					if ($key === 'documents') {
+						$output = $this->projectDocumentList($output, (string) ($args['modulepart'] ?? ''));
+					}
+				} catch (Throwable $e) {
+					$code = (int) $e->getCode();
+					$message = $e->getMessage();
+					if ($message === '') {
+						// Core throws bare RestException(403) in places: give the model
+						// something to reason on instead of an empty string.
+						$message = 'Access denied or resource error (HTTP '.($code > 0 ? $code : 500).').';
+					}
+					if (strpos($message, 'Error when validating parameter sqlfilters') === 0) {
+						// The API's own wording ("Bad syntax of the search string: ...")
+						// shows the user a query they never wrote: say what went wrong
+						// and what to do instead.
+						global $langs;
+						dol_syslog(get_class($this).'::execute '.$name.' '.$message, LOG_WARNING);
+						$langs->load('other');
+						$message = $langs->transnoentitiesnoconv('AIBadSearchFilter');
+					}
+					$output = [
+						"error" => $message,
+						"http_status" => ($code > 0 ? $code : 500)
+					];
+					// The API answers 404 for an object with no files: that is an empty
+					// list, unless the object itself does not exist.
+					if ($key === 'documents' && $code == 404 && $this->documentObjectExists($args)) {
+						$output = [];
+					}
 				}
-				if ($key === 'documents') {
-					$output = $this->projectDocumentList($output, (string) ($args['modulepart'] ?? ''));
-				}
-			} catch (Throwable $e) {
-				$code = (int) $e->getCode();
-				$message = $e->getMessage();
-				if ($message === '') {
-					// Core throws bare RestException(403) in places: give the model
-					// something to reason on instead of an empty string.
-					$message = 'Access denied or resource error (HTTP '.($code > 0 ? $code : 500).').';
-				}
-				if (strpos($message, 'Error when validating parameter sqlfilters') === 0) {
-					// The API's own wording ("Bad syntax of the search string: ...")
-					// shows the user a query they never wrote: say what went wrong
-					// and what to do instead.
-					global $langs;
-					dol_syslog(get_class($this).'::execute '.$name.' '.$message, LOG_WARNING);
-					$langs->load('other');
-					$message = $langs->transnoentitiesnoconv('AIBadSearchFilter');
-				}
-				$output = [
-					"error" => $message,
-					"http_status" => ($code > 0 ? $code : 500)
-				];
-				// The API answers 404 for an object with no files: that is an empty
-				// list, unless the object itself does not exist.
-				if ($key === 'documents' && $code == 404 && $this->documentObjectExists($args)) {
-					$output = [];
+				$printed = ob_get_clean();
+				if ($printed !== '' && $printed !== false) {
+					dol_syslog(get_class($this).'::execute '.$name.' printed output: '.dol_trunc(strip_tags($printed), 200), LOG_WARNING);
 				}
 			}
-			$printed = ob_get_clean();
-			if ($printed !== '' && $printed !== false) {
-				dol_syslog(get_class($this).'::execute '.$name.' printed output: '.dol_trunc(strip_tags($printed), 200), LOG_WARNING);
+
+			// A record read that came back empty is no record.
+			if (!empty($methodmeta['needs_id']) && is_array($output) && !isset($output['error']) && empty($output['id'])) {
+				$output = array('error' => (string) $methodmeta['needs_id'], 'http_status' => 404);
+			}
+
+			// A list the REST method does not bound, and fields that stay on the server.
+			if (is_array($output) && !isset($output['error']) && (!empty($methodmeta['max_items']) || !empty($methodmeta['drop_fields']))) {
+				$output = $this->shapeReadOutput($output, $methodmeta);
+			}
+
+			// Extrafields flagged as personal data (GDPR) must not reach an AI provider.
+			$elementForExtrafields = $this->extrafieldsElementForEndpoint($key);
+			if ($elementForExtrafields !== '' && empty($writemeta['compact_result'])) {
+				require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
+				$output = aiStripPersonalExtrafields($this->db, $output, $elementForExtrafields);
+			}
+
+			return $output;
+		} finally {
+			DolibarrApiAccess::$user = $saveduserapi;
+			if ($hadGlobalUser) {
+				$GLOBALS['user'] = $saveduserglobal;
+			} else {
+				unset($GLOBALS['user']);
 			}
 		}
-
-		// A record read that came back empty is no record.
-		if (!empty($methodmeta['needs_id']) && is_array($output) && !isset($output['error']) && empty($output['id'])) {
-			$output = array('error' => (string) $methodmeta['needs_id'], 'http_status' => 404);
-		}
-
-		// A list the REST method does not bound, and fields that stay on the server.
-		if (is_array($output) && !isset($output['error']) && (!empty($methodmeta['max_items']) || !empty($methodmeta['drop_fields']))) {
-			$output = $this->shapeReadOutput($output, $methodmeta);
-		}
-
-		// Extrafields flagged as personal data (GDPR) must not reach an AI provider.
-		$elementForExtrafields = $this->extrafieldsElementForEndpoint($key);
-		if ($elementForExtrafields !== '' && empty($writemeta['compact_result'])) {
-			require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
-			$output = aiStripPersonalExtrafields($this->db, $output, $elementForExtrafields);
-		}
-
-		// Restore the caller's context (single exit point).
-		DolibarrApiAccess::$user = $saveduserapi;
-		if ($saveduserglobal !== null) {
-			$GLOBALS['user'] = $saveduserglobal;
-		}
-
-		return $output;
 	}
 
 	/**
