@@ -454,13 +454,16 @@ class MCPServer
 
 		// 2. Inventory Health Workflow
 		if ($name === 'inventory_health') {
-			$prodRaw = $args['product_name'] ?? 'the product';
+			$prodRaw = isset($args['product_name']) && is_scalar($args['product_name']) ? trim((string) $args['product_name']) : '';
 
-			// Sanitize input (strict: allow only safe chars)
-			$prod = preg_replace('/[^a-zA-Z0-9_\-\. ]/', '', (string) $prodRaw);
-
-			// Fallback if empty after sanitization
-			if (empty($prod)) {
+			// Remove control characters and bound prompt input without stripping
+			// accents or non-Latin product names. JSON encoding below keeps the
+			// supplied name as a quoted data value in the prompt.
+			$prod = preg_replace('/[\\x00-\\x1F\\x7F]/', '', $prodRaw);
+			if (is_string($prod)) {
+				$prod = preg_replace('/^(.{0,200}).*$/us', '$1', $prod);
+			}
+			if (!is_string($prod) || trim($prod) === '') {
 				$prod = 'the product';
 			}
 
@@ -477,11 +480,12 @@ class MCPServer
 						"role" => "user",
 						"content" => [
 							"type" => "text",
-							"text" => "Analyze inventory for a product using the following steps:
-								1. Search for the product by name.
-								2. Retrieve its ID.
-								3. Call `analyze_stock_forecast` with that ID.
-								4. Return burn rate, days remaining, and reorder recommendation."
+							"text" => "Analyze inventory using only the available Dolibarr MCP tools:
+								1. Find the product with `api_products_list` using a small limit and filters on its reference or label. If multiple products match, ask the user to choose; never guess.
+								2. Fetch the chosen product with `api_products_get` and request stock data when supported (`includestockdata=1`).
+								3. Fetch a bounded, recent history of movements with `api_stockmovements_list`, filtering on `(t.fk_product:=:'PRODUCT_ID')`. Movement quantity is signed: positive means stock in, negative means stock out.
+								4. Estimate average daily consumption from negative movement quantities over the actual observed date range. Do not count incoming quantities as consumption; if movements are too sparse or the current stock is unknown, state that the runway cannot be estimated reliably.
+								5. If the data is sufficient, estimate days remaining as current stock divided by average daily stock outflow, and state the period, quantities, assumptions, and uncertainty. Never invent missing data."
 						]
 					],
 					[
