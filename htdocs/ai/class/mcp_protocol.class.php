@@ -202,7 +202,7 @@ class MCPServer
 
 		// Per JSON-RPC 2.0 spec, the Server MUST NOT reply to a Notification (no ID).
 		// MCP explicitly requires responses for most methods, so we drop any other notifications.
-		if ($this->requestId === null && !in_array($method, ['notifications/initialized', 'ping'])) {
+		if ($this->isNotification && !in_array($method, ['notifications/initialized', 'ping'])) {
 			return null;
 		}
 
