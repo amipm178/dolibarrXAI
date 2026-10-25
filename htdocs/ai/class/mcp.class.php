@@ -672,10 +672,10 @@ class McpHandler
 				}
 			}
 			if (count($candidates) === 1) {
-				dol_syslog("[McpHandler] Tool name '".$toolName."' recovered to '".$candidates[0]."'.", LOG_INFO);
+				dol_syslog("[McpHandler] A tool-name alias was recovered to '".$candidates[0]."'.", LOG_INFO);
 				$toolName = $candidates[0];
 			} else {
-				return ["error" => "Tool '{$toolName}' not found."];
+				return ["error" => "Tool not found."];
 			}
 		}
 
