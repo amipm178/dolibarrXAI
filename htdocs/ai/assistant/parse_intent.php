@@ -152,7 +152,7 @@ try {
 	$query = isset($data['query']) ? trim($data['query']) : '';
 	// Set by the chat when it calls back after running the read tool this
 	// endpoint flagged with needs_followup: the result is the last history turn.
-	$isFollowup = !empty($data['followup']);
+	$isFollowup = isset($data['followup']) && in_array($data['followup'], array(true, 1, '1'), true);
 
 	if (getDolGlobalString("AI_DEBUG")) {
 		dol_syslog("parse_intent.php isFollowup=".($isFollowup ? 1 : 0), LOG_DEBUG, 0, '_ai');
@@ -168,8 +168,9 @@ try {
 	$aiPageContextLine = '';
 	$ctxNamesToMask = array();
 	if (!empty($data['context']) && is_array($data['context'])) {
-		$ctxElement = isset($data['context']['element']) ? (string) $data['context']['element'] : '';
-		$ctxId = isset($data['context']['id']) ? (int) $data['context']['id'] : 0;
+		$ctxElement = isset($data['context']['element']) && is_string($data['context']['element']) ? trim($data['context']['element']) : '';
+		$ctxIdValue = $data['context']['id'] ?? null;
+		$ctxId = (is_int($ctxIdValue) || (is_string($ctxIdValue) && ctype_digit($ctxIdValue))) ? (int) $ctxIdValue : 0;
 		// element => [classfile, classname, label, rights module, rights perm(, rights subperm)]
 		// External modules with their own objects opt in through the
 		// AI_ASSISTANT_CONTEXT_ELEMENTS const: a JSON array of entries
