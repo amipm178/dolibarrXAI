@@ -5449,7 +5449,9 @@ class ToolApiBridge extends McpTool
 				}
 				$printed = ob_get_clean();
 				if ($printed !== '' && $printed !== false) {
-					dol_syslog(get_class($this).'::execute '.$name.' printed output: '.dol_trunc(strip_tags($printed), 200), LOG_WARNING);
+					// Unexpected output can contain customer data, tokens, SQL errors or paths.
+				// Record that output occurred without copying its contents into logs.
+				dol_syslog(get_class($this).'::execute '.$name.' produced unexpected output', LOG_WARNING);
 				}
 			}
 
