@@ -4346,7 +4346,9 @@ class ToolApiBridge extends McpTool
 			'Expedition' => array('expedition', '', '')
 		);
 		if (!isset($map[$class])) {
-			return true;
+			// Fail closed: a newly added write target must not bypass the object-level
+			// visibility check simply because its REST permission mapping is missing.
+			return false;
 		}
 		require_once DOL_DOCUMENT_ROOT.'/core/lib/security.lib.php';
 		$m = $map[$class];
