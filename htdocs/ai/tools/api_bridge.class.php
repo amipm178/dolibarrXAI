@@ -5250,11 +5250,16 @@ class ToolApiBridge extends McpTool
 		// (hooks, triggers, log attribution, another handler) may inherit the
 		// tool's user.
 		$saveduserapi = DolibarrApiAccess::$user;
-		$saveduserglobal = empty($GLOBALS['user']) ? null : $GLOBALS['user'];
+		$hadGlobalUser = array_key_exists('user', $GLOBALS);
+		$saveduserglobal = $hadGlobalUser ? $GLOBALS['user'] : null;
 		DolibarrApiAccess::$user = $this->user;
 		$GLOBALS['user'] = $this->user;
 
-		require_once $ep['path'];
+		// Restore both user contexts even if endpoint loading, reflection,
+		// argument mapping, output shaping, or a hook throws before the API-call
+		// try/catch below is reached.
+		try {
+			require_once $ep['path'];
 		$api = new $ep['class']();
 
 		// Map named MCP args onto the method's positional signature.
@@ -5443,13 +5448,15 @@ class ToolApiBridge extends McpTool
 			$output = aiStripPersonalExtrafields($this->db, $output, $elementForExtrafields);
 		}
 
-		// Restore the caller's context (single exit point).
-		DolibarrApiAccess::$user = $saveduserapi;
-		if ($saveduserglobal !== null) {
-			$GLOBALS['user'] = $saveduserglobal;
-		}
-
 		return $output;
+		} finally {
+			DolibarrApiAccess::$user = $saveduserapi;
+			if ($hadGlobalUser) {
+				$GLOBALS['user'] = $saveduserglobal;
+			} else {
+				unset($GLOBALS['user']);
+			}
+		}
 	}
 
 	/**
