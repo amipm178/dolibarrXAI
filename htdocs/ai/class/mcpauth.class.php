@@ -241,7 +241,7 @@ class McpAuth
 			// every REST API key into an MCP credential: an administrator
 			// still decides who may talk to the assistant.
 			if (!$tmpuser->hasRight('ai', 'assistant', 'use')) {
-				dol_syslog('[MCP Server] Authentication KO: user '.$tmpuser->login.' has no ai/assistant/use permission', LOG_NOTICE);
+				dol_syslog('[MCP Server] Authentication KO: user id '.$userid.' has no ai/assistant/use permission', LOG_NOTICE);
 				$this->httpcode = 403;
 				$this->error = 'The user owning this API key is not allowed to use the AI assistant';
 				return -1;
@@ -330,16 +330,16 @@ class McpAuth
 		// that did not come from the value presented (a collation that ignores
 		// case or trailing spaces, for instance).
 		if (!hash_equals((string) dolDecrypt($obj->storedkey), $credential)) {
-			dol_syslog('[MCP Server] Authentication KO: key matched user '.$obj->login.' but differs from the stored value', LOG_WARNING);
+			dol_syslog('[MCP Server] Authentication KO: API-key lookup matched user id '.((int) $obj->rowid).' but exact credential comparison failed', LOG_WARNING);
 			return 0;
 		}
 
 		if (empty($obj->statut)) {
-			dol_syslog('[MCP Server] Authentication KO: user '.$obj->login.' is disabled', LOG_NOTICE);
+			dol_syslog('[MCP Server] Authentication KO: disabled user id '.((int) $obj->rowid).' presented an API key', LOG_NOTICE);
 			return 0;
 		}
 
-		dol_syslog('[MCP Server] Request authenticated for user '.$obj->login, LOG_DEBUG);
+		dol_syslog('[MCP Server] Request authenticated for user id '.((int) $obj->rowid), LOG_DEBUG);
 
 		return (int) $obj->rowid;
 	}
