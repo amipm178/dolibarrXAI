@@ -48,6 +48,18 @@ class McpLogSanitizerTest extends PHPUnit\\Framework\\TestCase
 		$this->assertSame(-32000, $error['error']['code']);
 	}
 
+	public function testArgumentKeyMetadataIsBounded(): void
+	{
+		$arguments = array();
+		for ($i = 0; $i < 75; $i++) {
+			$arguments[str_repeat('k', 120).$i] = 'private';
+		}
+		$keys = McpLogSanitizer::argumentKeys($arguments);
+
+		$this->assertCount(50, $keys);
+		$this->assertSame(100, strlen($keys[0]));
+	}
+
 	public function testJsonEncodedArgumentObjectReturnsKeysOnly(): void
 	{
 		$this->assertSame(
