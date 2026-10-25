@@ -98,7 +98,7 @@ class AiWriteConfirmation
 
 		if (!$this->db->query($sql)) {
 			$this->error = 'Cannot store the pending confirmation';
-			dol_syslog('[AiWriteConfirmation] '.$this->error.': '.$this->db->lasterror(), LOG_ERR);
+			dol_syslog('[AiWriteConfirmation] cannot store pending confirmation', LOG_ERR);
 
 			return '';
 		}
