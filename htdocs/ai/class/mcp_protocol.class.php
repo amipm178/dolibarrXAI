@@ -120,8 +120,23 @@ class MCPServer
 	{
 		$this->requestId = $request['id'] ?? null;
 		$h = array_change_key_case($headers, CASE_LOWER);
-		$params = (isset($request['params']) && is_array($request['params'])) ? $request['params'] : array();
-		$meta = (isset($params['_meta']) && is_array($params['_meta'])) ? $params['_meta'] : array();
+
+		// Validate request shapes before reading transport metadata. This method
+		// runs before handleRequest() in the HTTP entry point, so it must not
+		// silently coerce malformed params or cast an array protocol version to
+		// a string (which produces warnings and can hide malformed requests).
+		if (array_key_exists('params', $request) && !is_array($request['params'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		$params = $request['params'] ?? array();
+		if (array_key_exists('_meta', $params) && !is_array($params['_meta'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		$meta = $params['_meta'] ?? array();
+		$versionKey = 'io.modelcontextprotocol/protocolVersion';
+		if (array_key_exists($versionKey, $meta) && !is_string($meta[$versionKey])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
 
 		// MCP-Protocol-Version header: must be supported, and must match the
 		// per-request _meta value when both are present (schema: RequestMetaObject).
