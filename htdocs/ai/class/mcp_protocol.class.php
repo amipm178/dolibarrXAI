@@ -118,8 +118,14 @@ class MCPServer
 	 */
 	public function validateTransportHeaders(array $headers, array $request): ?array
 	{
-		$this->requestId = $request['id'] ?? null;
+		$id = $request['id'] ?? null;
+		$this->requestId = (is_string($id) || is_int($id) || is_float($id) || $id === null) ? $id : null;
 		$h = array_change_key_case($headers, CASE_LOWER);
+
+		// This transport check runs before handleRequest() and may inspect
+		// malformed input. Use only correctly typed values here; let the router
+		// return the JSON-RPC Invalid params response so malformed batch items do
+		// not short-circuit the whole batch during transport-header validation.
 		$params = (isset($request['params']) && is_array($request['params'])) ? $request['params'] : array();
 		$meta = (isset($params['_meta']) && is_array($params['_meta'])) ? $params['_meta'] : array();
 
@@ -131,7 +137,7 @@ class MCPServer
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $hver, 'supported' => self::PROTOCOL_VERSIONS));
 			}
-			$mver = isset($meta['io.modelcontextprotocol/protocolVersion']) ? (string) $meta['io.modelcontextprotocol/protocolVersion'] : null;
+			$mver = isset($meta['io.modelcontextprotocol/protocolVersion']) && is_string($meta['io.modelcontextprotocol/protocolVersion']) ? $meta['io.modelcontextprotocol/protocolVersion'] : null;
 			if ($mver !== null && $mver !== $hver) {
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32020, 'MCP-Protocol-Version header does not match request _meta');
@@ -139,13 +145,15 @@ class MCPServer
 		}
 
 		// Mcp-Method: when present, must equal the JSON-RPC method.
-		if (isset($h['mcp-method']) && trim($h['mcp-method']) !== (string) ($request['method'] ?? '')) {
+		$requestMethod = isset($request['method']) && is_string($request['method']) ? $request['method'] : '';
+		if (isset($h['mcp-method']) && trim($h['mcp-method']) !== $requestMethod) {
 			$this->httpStatus = 400;
 			return $this->errorResponse(-32020, 'Mcp-Method header does not match request body method');
 		}
 
 		// Mcp-Name: when present, must equal params.name (tools/call, prompts/get).
-		if (isset($h['mcp-name']) && trim($h['mcp-name']) !== (string) ($params['name'] ?? '')) {
+		$paramName = isset($params['name']) && is_string($params['name']) ? $params['name'] : '';
+		if (isset($h['mcp-name']) && trim($h['mcp-name']) !== $paramName) {
 			$this->httpStatus = 400;
 			return $this->errorResponse(-32020, 'Mcp-Name header does not match request body params.name');
 		}
@@ -164,7 +172,13 @@ class MCPServer
 	 */
 	public function handleRequest(array $request): ?array
 	{
-		$this->requestId = $request['id'] ?? null;
+		$id = $request['id'] ?? null;
+		if (array_key_exists('id', $request) && !(is_string($id) || is_int($id) || is_float($id) || $id === null)) {
+			// An invalid ID cannot be echoed back as a JSON-RPC response ID.
+			$this->requestId = null;
+			return array('jsonrpc' => '2.0', 'id' => null, 'error' => array('code' => -32600, 'message' => 'Invalid Request'));
+		}
+		$this->requestId = $id;
 
 		// Spec: JSON-RPC 2.0 check. Per JSON-RPC 2.0, an Invalid Request gets
 		// an error response with the request id, or id null when it cannot be
@@ -179,7 +193,7 @@ class MCPServer
 			return $err;
 		}
 		$method = $request['method'] ?? '';
-		$params = $request['params'] ?? [];
+		$params = array_key_exists('params', $request) ? $request['params'] : [];
 
 		// Per JSON-RPC 2.0 spec, the Server MUST NOT reply to a Notification (no ID).
 		// MCP explicitly requires responses for most methods, so we drop any other notifications.
@@ -187,13 +201,57 @@ class MCPServer
 			return null;
 		}
 
+		// MCP methods take a params object. JSON decoded into associative arrays
+		// makes objects and lists both PHP arrays, but scalars must be rejected
+		// here rather than reaching array-typed handlers and raising an uncaught
+		// TypeError (which can terminate the HTTP request without a JSON-RPC error).
+		if (!is_array($params)) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+
+		// Validate _meta before nested access: a scalar _meta value must not
+		// trigger PHP warnings or be coerced into a bogus protocol version.
+		if (array_key_exists('_meta', $params) && !is_array($params['_meta'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+
 		// Per-request negotiation (2026-07-28): an unsupported _meta protocol
 		// version is refused before dispatch. Absent _meta = legacy client, allowed.
-		if (is_array($params) && isset($params['_meta']['io.modelcontextprotocol/protocolVersion'])) {
-			$reqVer = (string) $params['_meta']['io.modelcontextprotocol/protocolVersion'];
-			if (!in_array($reqVer, self::PROTOCOL_VERSIONS)) {
+		$versionKey = 'io.modelcontextprotocol/protocolVersion';
+		if (isset($params['_meta']) && array_key_exists($versionKey, $params['_meta'])) {
+			$reqVer = $params['_meta'][$versionKey];
+			if (!is_string($reqVer)) {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (!in_array($reqVer, self::PROTOCOL_VERSIONS, true)) {
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $reqVer, 'supported' => self::PROTOCOL_VERSIONS));
+			}
+		}
+
+		// Validate method-specific fields before calling handlers. MCP clients
+		// are untrusted input; typed handlers and string interpolation must not
+		// receive arrays/objects where names or URIs are expected.
+		if ($method === 'initialize' && array_key_exists('protocolVersion', $params) && !is_string($params['protocolVersion'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		if ($method === 'tools/call') {
+			if (!isset($params['name']) || !is_string($params['name']) || trim($params['name']) === '') {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (array_key_exists('arguments', $params) && !is_array($params['arguments'])) {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+		}
+		if ($method === 'resources/read' && (!isset($params['uri']) || !is_string($params['uri']) || trim($params['uri']) === '')) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+		if ($method === 'prompts/get') {
+			if (!isset($params['name']) || !is_string($params['name']) || trim($params['name']) === '') {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (array_key_exists('arguments', $params) && !is_array($params['arguments'])) {
+				return $this->errorResponse(-32602, 'Invalid params');
 			}
 		}
 
