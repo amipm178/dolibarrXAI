@@ -148,3 +148,5 @@ The continued review identified five additional security/privacy/reliability iss
 - MCP authentication logging: a failed API-key lookup no longer writes the database driver's raw error to logs, avoiding accidental disclosure of SQL or credential-derived values.
 
 - MCP tool-call audit logs: argument keys are now passed through the existing allowlist-based sanitizer before logging, preventing attacker-controlled key names (including unusual text) from being copied into logs.
+
+- **Write-confirmation argument fingerprinting:** the confirmation hash previously depended on `json_encode()`, which returns `false` for invalid UTF-8. Casting that failure to an empty string could collapse distinct malformed argument payloads to the same fingerprint. The hash now uses recursively key-sorted `serialize()` output, preserving string bytes and PHP value types. PHP lint, targeted tests, and runtime validation remain pending.
