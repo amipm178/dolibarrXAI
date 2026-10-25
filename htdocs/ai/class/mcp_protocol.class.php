@@ -187,11 +187,29 @@ class MCPServer
 			return null;
 		}
 
+		// MCP methods take a params object. JSON decoded into associative arrays
+		// makes objects and lists both PHP arrays, but scalars must be rejected
+		// here rather than reaching array-typed handlers and raising an uncaught
+		// TypeError (which can terminate the HTTP request without a JSON-RPC error).
+		if (!is_array($params)) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+
+		// Validate _meta before nested access: a scalar _meta value must not
+		// trigger PHP warnings or be coerced into a bogus protocol version.
+		if (array_key_exists('_meta', $params) && !is_array($params['_meta'])) {
+			return $this->errorResponse(-32602, 'Invalid params');
+		}
+
 		// Per-request negotiation (2026-07-28): an unsupported _meta protocol
 		// version is refused before dispatch. Absent _meta = legacy client, allowed.
-		if (is_array($params) && isset($params['_meta']['io.modelcontextprotocol/protocolVersion'])) {
-			$reqVer = (string) $params['_meta']['io.modelcontextprotocol/protocolVersion'];
-			if (!in_array($reqVer, self::PROTOCOL_VERSIONS)) {
+		$versionKey = 'io.modelcontextprotocol/protocolVersion';
+		if (isset($params['_meta']) && array_key_exists($versionKey, $params['_meta'])) {
+			$reqVer = $params['_meta'][$versionKey];
+			if (!is_string($reqVer)) {
+				return $this->errorResponse(-32602, 'Invalid params');
+			}
+			if (!in_array($reqVer, self::PROTOCOL_VERSIONS, true)) {
 				$this->httpStatus = 400;
 				return $this->errorResponse(-32022, 'Unsupported protocol version', array('requested' => $reqVer, 'supported' => self::PROTOCOL_VERSIONS));
 			}
