@@ -106,4 +106,5 @@ The continued review identified five additional security/privacy/reliability iss
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
 - A namespace-escaping issue in several newly added PHPUnit files was corrected during review. The exact repository test files have not been linted or executed locally; the earlier syntax checks covered locally recreated structures only.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
-- All twelve PRs remain draft and unmerged. Each requires review and a full test run before release.
+- PRs #1–#11 were squash-merged into `XCODE`; the HTTP-envelope changes from PR #12 were applied directly to `XCODE` alongside the already-integrated audit sanitizer and shared-key authorization. PR #12 was closed to avoid a conflicting parallel patch.
+- All changes are now consolidated in the [`XCODE` branch](https://github.com/amipm178/dolibarrXAI/tree/XCODE). This is not a release sign-off: run the full PHPUnit suite and Dolibarr integration/security tests before deploying.
