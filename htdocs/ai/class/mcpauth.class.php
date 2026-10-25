@@ -123,25 +123,34 @@ class McpAuth
 		if ($server === null) {
 			$server = $_SERVER;
 		}
+		if (!is_array($server)) {
+			$server = array();
+		}
 		if ($get === null) {
 			$get = $_GET;	// Keep $_GET here: the key is read before any Dolibarr context exists.
+		}
+		if (!is_array($get)) {
+			$get = array();
 		}
 
 		$credential = '';
 
-		if (!empty($server['HTTP_DOLAPIKEY'])) {
+		if (isset($server['HTTP_DOLAPIKEY']) && is_string($server['HTTP_DOLAPIKEY']) && $server['HTTP_DOLAPIKEY'] !== '') {
 			$credential = $server['HTTP_DOLAPIKEY'];
 		}
 
 		if ($credential === '') {
 			$authheader = '';
-			if (!empty($server['HTTP_AUTHORIZATION'])) {
+			if (isset($server['HTTP_AUTHORIZATION']) && is_string($server['HTTP_AUTHORIZATION']) && $server['HTTP_AUTHORIZATION'] !== '') {
 				$authheader = $server['HTTP_AUTHORIZATION'];
-			} elseif (!empty($server['REDIRECT_HTTP_AUTHORIZATION'])) {
+			} elseif (isset($server['REDIRECT_HTTP_AUTHORIZATION']) && is_string($server['REDIRECT_HTTP_AUTHORIZATION']) && $server['REDIRECT_HTTP_AUTHORIZATION'] !== '') {
 				$authheader = $server['REDIRECT_HTTP_AUTHORIZATION'];
 			} elseif (function_exists('getallheaders')) {
-				$headers = array_change_key_case(getallheaders(), CASE_LOWER);
-				$authheader = isset($headers['authorization']) ? $headers['authorization'] : '';
+				$headers = getallheaders();
+				if (is_array($headers)) {
+					$headers = array_change_key_case($headers, CASE_LOWER);
+					$authheader = isset($headers['authorization']) && is_string($headers['authorization']) ? $headers['authorization'] : '';
+				}
 			}
 			$reg = array();
 			if ($authheader !== '' && preg_match('/^Bearer\s+(\S+)$/i', $authheader, $reg)) {
@@ -149,7 +158,7 @@ class McpAuth
 			}
 		}
 
-		if ($credential === '' && !empty($server['HTTP_X_API_KEY'])) {
+		if ($credential === '' && isset($server['HTTP_X_API_KEY']) && is_string($server['HTTP_X_API_KEY']) && $server['HTTP_X_API_KEY'] !== '') {
 			$credential = $server['HTTP_X_API_KEY'];
 		}
 
@@ -161,14 +170,14 @@ class McpAuth
 		// webserver level and rotate the key regularly.
 		if ($credential === '') {
 			foreach (array('DOLAPIKEY', 'api_key', 'key') as $param) {
-				if (!empty($get[$param])) {
+				if (isset($get[$param]) && is_string($get[$param]) && $get[$param] !== '') {
 					$credential = $get[$param];
 					break;
 				}
 			}
 		}
 
-		return dol_string_nounprintableascii((string) $credential, 1);
+		return is_string($credential) ? dol_string_nounprintableascii($credential, 1) : '';
 	}
 
 	/**
