@@ -31,6 +31,22 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		$this->assertSame('ok', $response['result']['status']);
 	}
 
+	public function testExplicitNullIdReceivesMethodNotFoundError(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => null,
+			'method' => 'method/does-not-exist',
+			'params' => array()
+		));
+
+		$this->assertTrue(is_array($response));
+		$this->assertArrayHasKey('id', $response);
+		$this->assertNull($response['id']);
+		$this->assertSame(-32601, $response['error']['code']);
+	}
+
 	public function testMissingIdRemainsNotification(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
