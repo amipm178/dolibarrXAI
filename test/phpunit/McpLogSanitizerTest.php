@@ -48,6 +48,20 @@ class McpLogSanitizerTest extends PHPUnit\\Framework\\TestCase
 		$this->assertSame(-32000, $error['error']['code']);
 	}
 
+	public function testRequestMetadataIsBounded(): void
+	{
+		$request = array(
+			'jsonrpc' => '2.0',
+			'id' => str_repeat('i', 200),
+			'method' => 'tools/call',
+			'params' => array('name' => str_repeat('t', 400), 'arguments' => array())
+		);
+		$safe = McpLogSanitizer::sanitizeRequest($request);
+
+		$this->assertSame(100, strlen($safe['id']));
+		$this->assertSame(255, strlen($safe['params']['name']));
+	}
+
 	public function testArgumentKeyMetadataIsBounded(): void
 	{
 		$arguments = array();
