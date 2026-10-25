@@ -71,13 +71,28 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 		$keys = McpLogSanitizer::argumentKeys($arguments);
 
 		$this->assertCount(50, $keys);
-		$this->assertSame(100, strlen($keys[0]));
+		$this->assertSame('[redacted-key]', $keys[0]);
 	}
 
 	public function testControlCharactersAreRemovedFromLoggedArgumentKeys(): void
 	{
 		$keys = McpLogSanitizer::argumentKeys(array("customer\nforged-log-entry" => 'private-value'));
-		$this->assertSame(array('customerforged-log-entry'), $keys);
+		$this->assertSame(array('[redacted-key]'), $keys);
+	}
+
+	public function testUnknownArgumentKeysCannotLeakPersonalData(): void
+	{
+		$keys = McpLogSanitizer::argumentKeys(array(
+			'person@example.test' => 'private',
+			'Jane Doe' => 'private',
+			'JaneDoe' => 'private',
+			'customer' => 'private'
+		));
+
+		$this->assertSame(
+			array('[redacted-key]', '[redacted-key]', '[redacted-key]', 'customer'),
+			$keys
+		);
 	}
 
 	public function testJsonEncodedArgumentObjectReturnsKeysOnly(): void
