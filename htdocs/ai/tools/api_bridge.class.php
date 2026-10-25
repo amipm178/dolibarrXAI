@@ -3809,6 +3809,7 @@ class ToolApiBridge extends McpTool
 			} catch (InvalidArgumentException $e) {
 				return $e->getMessage();
 			}
+			$args = $this->resolveUserSentinels($args);
 			$parent = $this->fetchWriteParent($write, $args);
 			if (!$parent) {
 				return 'Record not found';
@@ -3854,6 +3855,7 @@ class ToolApiBridge extends McpTool
 			// not escape the MCP request as an uncaught exception.
 			return $e->getMessage();
 		}
+		$args = $this->resolveUserSentinels($args);
 
 		$kind = (string) ($write['kind'] ?? '');
 		if (in_array($kind, array('update', 'action', 'delete', 'payment'), true)) {
@@ -4015,6 +4017,7 @@ class ToolApiBridge extends McpTool
 		} catch (InvalidArgumentException $e) {
 			return $e->getMessage();
 		}
+		$args = $this->resolveUserSentinels($args);
 		if (!empty($write['update'])) {
 			return '';
 		}
