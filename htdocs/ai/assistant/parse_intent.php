@@ -116,7 +116,11 @@ set_time_limit($timeout + 5);
 try {
 	// Input: bound raw JSON before decoding so an authenticated caller cannot
 	// force unbounded memory/CPU use with an oversized request body.
-	$raw_input = file_get_contents('php://input');
+	$inputStream = fopen('php://input', 'rb');
+	$raw_input = ($inputStream !== false) ? stream_get_contents($inputStream, 2 * 1024 * 1024 + 1) : false;
+	if (is_resource($inputStream)) {
+		fclose($inputStream);
+	}
 	if ($raw_input === false) {
 		http_response_code(400);
 		ob_end_clean();
