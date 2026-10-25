@@ -25,7 +25,7 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 			'params' => array()
 		));
 
-		$this->assertIsArray($response);
+		$this->assertTrue(is_array($response));
 		$this->assertArrayHasKey('id', $response);
 		$this->assertNull($response['id']);
 		$this->assertSame('ok', $response['result']['status']);
