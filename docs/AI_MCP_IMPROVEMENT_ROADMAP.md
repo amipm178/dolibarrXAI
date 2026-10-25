@@ -98,10 +98,11 @@ The continued review identified five additional security/privacy/reliability iss
 - [PR #8 — Runtime error containment](https://github.com/amipm178/dolibarrXAI/pull/8): the protocol dispatcher caught `Exception` only, so PHP engine failures such as `TypeError` could bypass its generic JSON-RPC error path. It now catches `Throwable`, returns a generic server error, and avoids logging exception messages that may contain sensitive values.
 - [PR #9 — Unconditional API user-context restoration](https://github.com/amipm178/dolibarrXAI/pull/9): `ToolApiBridge::execute()` temporarily replaces the global and REST API user, but the old restoration ran only at the normal end of the method. The new `finally` restores both contexts even if endpoint loading, reflection, hooks, or result shaping throws.
 - [PR #10 — Shared-key service-user authorization](https://github.com/amipm178/dolibarrXAI/pull/10): the legacy shared-key path loaded `AI_MCP_USER_ID` without checking that the account was active or had `ai/assistant/use`, unlike individual API-key authentication. The shared-key path now rejects disabled users and users lacking that permission.
+- [PR #11 — MCP credential type validation](https://github.com/amipm178/dolibarrXAI/pull/11): the credential parser accepted request-controlled values without verifying they were strings. Array-valued headers/query parameters could trigger string-conversion warnings. The parser now accepts only string credentials while preserving legacy string query credentials.
 
 ### Validation status
 
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
 - PHP syntax checks passed for the locally recreated test structures. This is not equivalent to linting the exact GitHub files or running the PHPUnit suite.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
-- All ten PRs remain draft and unmerged. Each requires review and a full test run before release.
+- All eleven PRs remain draft and unmerged. Each requires review and a full test run before release.
