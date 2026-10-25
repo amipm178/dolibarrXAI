@@ -3354,6 +3354,9 @@ class ToolApiBridge extends McpTool
 			if (!is_array($body)) {
 				throw new InvalidArgumentException('request_data must be a JSON object or object-shaped array');
 			}
+			if (array_filter(array_keys($body), 'is_int')) {
+				throw new InvalidArgumentException('request_data must contain named fields, not a JSON list');
+			}
 			// A model may nest the record under a key of its own naming
 			// ({\"thirdparty\": {...}}): unwrap a lone array value rather than
 			// passing the wrapper to the API, which sees no fields at all.
