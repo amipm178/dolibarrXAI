@@ -513,9 +513,17 @@ try {
 			)
 		);
 		if (getDolGlobalString("AI_DEBUG")) {
-			dol_syslog("parse_intent.php ".count($options)." third parties fit '".$tpAsk['phrase']."': the user chooses before anything is sent", LOG_DEBUG, 0, '_ai');
+			// Do not put the matched phrase (which can contain a company/person name)
+			// into application logs.
+			dol_syslog("parse_intent.php ".count($options)." third-party choices require user selection; phrase redacted", LOG_DEBUG, 0, '_ai');
 		}
-		ai_log_request($db, $user, aiRestoreDocumentBlocks($query, $aiDocuments['blocks']), $finalResponse, 'local', microtime(true) - $startTime, 1.0, 'Confirm');
+		// This early local-response path runs before the regular privacy guard
+		// masks $query. Keep the audit entry but never restore document contents
+		// or store the original query when privacy redaction is enabled.
+		$logQuery = !empty($doRedact)
+			? '[redacted by AI privacy setting]'
+			: aiRestoreDocumentBlocks($query, $aiDocuments['blocks']);
+		ai_log_request($db, $user, $logQuery, $finalResponse, 'local', microtime(true) - $startTime, 1.0, 'Confirm');
 		ob_end_clean();
 		echo json_encode($finalResponse);
 		exit;
