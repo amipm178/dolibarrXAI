@@ -5190,7 +5190,9 @@ class ToolApiBridge extends McpTool
 		}
 		$result = $obj->add_contact((int) $this->user->id, $code, 'internal');
 		if ($result < 0) {
-			dol_syslog(get_class($this).'::addCreatorContact '.$class.' '.$id.' '.$code.' result='.$result.' '.$obj->error, LOG_WARNING);
+			// Object errors can include SQL fragments or record data; keep the log
+			// to stable identifiers and the numeric failure code.
+			dol_syslog(get_class($this).'::addCreatorContact failed for '.$class.' id='.$id.' role='.$code.' result='.$result, LOG_WARNING);
 		}
 	}
 
