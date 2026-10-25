@@ -118,7 +118,8 @@ class MCPServer
 	 */
 	public function validateTransportHeaders(array $headers, array $request): ?array
 	{
-		$this->requestId = $request['id'] ?? null;
+		$id = $request['id'] ?? null;
+		$this->requestId = (is_string($id) || is_int($id) || is_float($id) || $id === null) ? $id : null;
 		$h = array_change_key_case($headers, CASE_LOWER);
 
 		// This transport check runs before handleRequest() and may inspect
@@ -171,7 +172,13 @@ class MCPServer
 	 */
 	public function handleRequest(array $request): ?array
 	{
-		$this->requestId = $request['id'] ?? null;
+		$id = $request['id'] ?? null;
+		if (array_key_exists('id', $request) && !(is_string($id) || is_int($id) || is_float($id) || $id === null)) {
+			// An invalid ID cannot be echoed back as a JSON-RPC response ID.
+			$this->requestId = null;
+			return array('jsonrpc' => '2.0', 'id' => null, 'error' => array('code' => -32600, 'message' => 'Invalid Request'));
+		}
+		$this->requestId = $id;
 
 		// Spec: JSON-RPC 2.0 check. Per JSON-RPC 2.0, an Invalid Request gets
 		// an error response with the request id, or id null when it cannot be
