@@ -49,6 +49,22 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		$this->assertStringNotContainsString('method/does-not-exist', json_encode($response));
 	}
 
+	public function testUnsupportedMetaProtocolVersionIsNotEchoed(): void
+	{
+		$server = $this->makeServerWithoutRuntime();
+		$version = 'private-version-'.str_repeat('x', 200);
+		$response = $server->handleRequest(array(
+			'jsonrpc' => '2.0',
+			'id' => 5,
+			'method' => 'ping',
+			'params' => array('_meta' => array('io.modelcontextprotocol/protocolVersion' => $version))
+		));
+
+		$this->assertTrue(is_array($response));
+		$this->assertSame(-32022, $response['error']['code']);
+		$this->assertStringNotContainsString($version, json_encode($response));
+	}
+
 	public function testUnknownResourceUriIsNotEchoed(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
