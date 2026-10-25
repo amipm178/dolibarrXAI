@@ -13,7 +13,39 @@
 class McpLogSanitizer
 {
 	/**
-	 * Return argument names only. Values are deliberately never copied to logs.
+	 * Argument names safe to retain in audit metadata. Unknown keys may be
+	 * attacker-controlled data (for example an email address used as a key),
+	 * so they are replaced with a fixed marker rather than copied into logs.
+	 *
+	 * @var array<string,bool>
+	 */
+	private static $safeArgumentKeys = array(
+		'id' => true, 'rowid' => true, 'name' => true, 'label' => true, 'ref' => true,
+		'ref_supplier' => true, 'ref_customer' => true, 'socid' => true, 'thirdparty' => true,
+		'customer' => true, 'supplier' => true, 'amount' => true, 'qty' => true,
+		'quantity' => true, 'price' => true, 'subprice' => true, 'remise_percent' => true,
+		'email' => true, 'phone' => true, 'date' => true, 'date_start' => true,
+		'date_end' => true, 'date_delivery' => true, 'date_reception' => true,
+		'date_creation' => true, 'date_modification' => true, 'status' => true,
+		'statut' => true, 'type' => true, 'limit' => true, 'page' => true,
+		'sortfield' => true, 'sortorder' => true, 'sqlfilters' => true, 'properties' => true,
+		'query' => true, 'note' => true, 'desc' => true, 'description' => true,
+		'lines' => true, 'product_ref' => true, 'fk_product' => true, 'warehouse_id' => true,
+		'category' => true, 'category_id' => true, 'client' => true, 'fournisseur' => true,
+		'subject' => true, 'message' => true, 'title' => true, 'user_id' => true,
+		'user' => true, 'withLines' => true, 'includestockdata' => true,
+		'pagination_data' => true, 'mode' => true, 'currency_code' => true,
+		'datec' => true, 'datef' => true, 'datep' => true, 'dateo' => true, 'datev' => true,
+		'fk_soc' => true, 'fk_entrepot' => true, 'entity' => true, 'total' => true,
+		'vat' => true, 'tva_tx' => true, 'payment_mode' => true, 'fk_project' => true,
+		'project_id' => true, 'fk_user' => true, 'fk_statut' => true, 'start' => true,
+		'end' => true, 'offset' => true, 'order' => true, 'search' => true, 'sort' => true,
+		'count' => true, 'code' => true, 'country' => true, 'town' => true, 'zip' => true,
+		'address' => true, 'vatnumber' => true
+	);
+
+	/**
+	 * Return safe argument names only. Values are deliberately never copied to logs.
 	 *
 	 * @param mixed $arguments Tool arguments, as an array or JSON string.
 	 * @return string[]
@@ -32,7 +64,13 @@ class McpLogSanitizer
 		}
 
 		$keys = array_slice(array_keys($arguments), 0, 50);
-		return array_map(function ($key) { return preg_replace('/[\\x00-\\x1F\\x7F]/', '', substr((string) $key, 0, 100)); }, $keys);
+		$safeKeys = array();
+		foreach ($keys as $key) {
+			$key = (string) $key;
+			$safeKeys[] = isset(self::$safeArgumentKeys[$key]) ? $key : '[redacted-key]';
+		}
+
+		return $safeKeys;
 	}
 
 	/**
