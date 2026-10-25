@@ -291,7 +291,8 @@ class MCPServer
 					return $this->successResponse($this->handlePromptGet($params));
 
 				default:
-					return $this->errorResponse(-32601, "Method not found: $method");
+					// Do not reflect arbitrary client-controlled method names in error bodies.
+					return $this->errorResponse(-32601, "Method not found");
 			}
 		} catch (Throwable $e) {
 			// TypeError and other engine errors are Throwable but not Exception.
