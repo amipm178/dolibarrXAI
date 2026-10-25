@@ -230,8 +230,11 @@ class MCPServer
 				default:
 					return $this->errorResponse(-32601, "Method not found: $method");
 			}
-		} catch (Exception $e) {
-			dol_syslog('[MCP] Internal error: ' . $e->getMessage(), LOG_ERR);
+		} catch (Throwable $e) {
+			// TypeError and other engine errors are Throwable but not Exception.
+			// Keep the client response generic and avoid logging exception messages,
+			// which may contain business values or user-supplied input.
+			dol_syslog('[MCP] Unhandled failure while processing method ' . substr($method, 0, 100) . ' (' . get_class($e) . ')', LOG_ERR);
 			return $this->errorResponse(-32000, 'Internal server error');
 		}
 	}
