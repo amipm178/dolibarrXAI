@@ -104,6 +104,6 @@ The continued review identified five additional security/privacy/reliability iss
 ### Validation status
 
 - Isolated PHP checks passed for the schema-normalization logic, path-boundary behavior, and MCP log-sanitization behavior.
-- PHP syntax checks passed for the locally recreated test structures. This is not equivalent to linting the exact GitHub files or running the PHPUnit suite.
+- A namespace-escaping issue in several newly added PHPUnit files was corrected during review. The exact repository test files have not been linted or executed locally; the earlier syntax checks covered locally recreated structures only.
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
 - All twelve PRs remain draft and unmerged. Each requires review and a full test run before release.
