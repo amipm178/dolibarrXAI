@@ -3840,7 +3840,13 @@ class ToolApiBridge extends McpTool
 			return $langs->trans($write['preview'], $parent->ref, (string) $context, implode('; ', $changes));
 		}
 
-		$args = $this->normaliseWriteArgs($args, $write);
+		try {
+			$args = $this->normaliseWriteArgs($args, $write);
+		} catch (InvalidArgumentException $e) {
+			// Invalid write arguments must be returned as a preview/precheck error,
+			// not escape the MCP request as an uncaught exception.
+			return $e->getMessage();
+		}
 
 		$kind = (string) ($write['kind'] ?? '');
 		if (in_array($kind, array('update', 'action', 'delete', 'payment'), true)) {
