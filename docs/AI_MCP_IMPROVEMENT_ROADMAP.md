@@ -140,3 +140,5 @@ The continued review identified five additional security/privacy/reliability iss
 - Write-confirmation token entropy: replace timestamp/`mt_rand()`-derived bearer tokens with 32 bytes from PHP's cryptographically secure `random_bytes()`; token issuance fails closed if secure randomness is unavailable. Runtime tests and PHP lint remain pending.
 
 - Bridge logging: creator-contact failure logs no longer include the business object's raw error string, which may contain SQL fragments or record data; logs retain only stable class/record/role identifiers and the result code. Runtime tests and PHP lint remain pending.
+
+- Bridge logging: unexpected output captured from an in-process REST API call is no longer copied (even truncated) into logs, since it may contain customer data, tokens, SQL errors, or server paths. Logs now record only that unexpected output occurred. Runtime tests and PHP lint remain pending.
