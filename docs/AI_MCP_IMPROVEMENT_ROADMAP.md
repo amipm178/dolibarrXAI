@@ -117,3 +117,10 @@ The continued review identified five additional security/privacy/reliability iss
 - **Exception logging:** MCP tool execution and API-bridge hook failures now log the exception class instead of raw exception messages, which can include user input or business data.
 - **Verification still required:** these latest regression tests have not been executed in a compatible Dolibarr/PHPUnit environment. Add HTTP-level tests for batch members, empty batches, notifications, transport-header mismatches and status codes; then run PHP lint, the focused PHPUnit files and the full supported suite before deployment.
 - **Scope:** this follow-up audits the fork-specific XCODE changes and adjacent AI/MCP paths. It is not a line-by-line security audit of the entire upstream Dolibarr codebase.
+
+
+### Continued audit updates (2026-10-25)
+
+- **Untrusted identifier reflection:** unknown JSON-RPC methods, resource URIs, prompt names and unsupported protocol-version values are no longer echoed verbatim in error responses. This avoids reflecting arbitrary client input into responses and keeps error payloads bounded. Focused regression cases were added for these paths.
+- **Audit metadata minimization:** string JSON-RPC IDs are now replaced with a fixed marker in both request and response audit records; only numeric/null IDs are retained for correlation. The logged method is restricted to known MCP methods, and the request parameter name is retained only when it matches a tool-like identifier pattern. Regression coverage checks email-like IDs/names and unknown methods.
+- **Validation status remains unchanged:** source files and regression-test presence were re-fetched from GitHub after the commits, but PHP lint and PHPUnit execution have not been performed in a compatible Dolibarr environment. No workflow run was returned by the available commit-run lookup. Do not treat the branch as production-certified.
