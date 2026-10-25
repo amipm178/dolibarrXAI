@@ -114,9 +114,41 @@ if (getDolGlobalString("AI_DEBUG")) {
 set_time_limit($timeout + 5);
 
 try {
-	// Input
+	// Input: bound raw JSON before decoding so an authenticated caller cannot
+	// force unbounded memory/CPU use with an oversized request body.
 	$raw_input = file_get_contents('php://input');
+	if ($raw_input === false) {
+		http_response_code(400);
+		ob_end_clean();
+		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Invalid request body.")));
+		exit;
+	}
+	if (strlen($raw_input) > 2 * 1024 * 1024) {
+		http_response_code(413);
+		ob_end_clean();
+		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Request is too large. Please shorten the conversation and try again.")));
+		exit;
+	}
+	$trimmedRawInput = ltrim($raw_input);
+	if ($trimmedRawInput === '' || $trimmedRawInput[0] !== '{') {
+		http_response_code(400);
+		ob_end_clean();
+		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Invalid request body.")));
+		exit;
+	}
 	$data = json_decode($raw_input, true);
+	if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+		http_response_code(400);
+		ob_end_clean();
+		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Invalid request body.")));
+		exit;
+	}
+	if (array_key_exists('query', $data) && !is_string($data['query'])) {
+		http_response_code(400);
+		ob_end_clean();
+		echo json_encode(array("tool" => "respond_to_user", "arguments" => array("message" => "Invalid request body.")));
+		exit;
+	}
 	$query = isset($data['query']) ? trim($data['query']) : '';
 	// Set by the chat when it calls back after running the read tool this
 	// endpoint flagged with needs_followup: the result is the last history turn.
@@ -1460,7 +1492,7 @@ try {
 		]
 	];
 
-	$realErrorForLog = "PHP Exception: " . $e->getMessage() . " in " . $e->getFile() . " on line " . $e->getLine();
+	$realErrorForLog = "PHP Exception: " . get_class($e);
 
 	dol_syslog("AI Critical Error: " . $realErrorForLog, LOG_ERR);
 	if (getDolGlobalString("AI_DEBUG")) {
