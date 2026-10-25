@@ -247,8 +247,13 @@ try {
 
 	$server = new MCPServer($db, $conf, $serviceUser);
 
+	// Preserve the top-level JSON shape: json_decode(..., true) maps both an
+	// empty JSON object ({}) and an empty JSON array ([]) to an empty PHP array.
+	// The raw first non-whitespace character reliably distinguishes batch input.
+	$isBatch = (isset($rawInput[0]) && ltrim($rawInput) !== '' && ltrim($rawInput)[0] === '[');
+
 	// Batch request handling
-	if (is_array($request) && array_keys($request) === range(0, count($request) - 1)) {
+	if ($isBatch && is_array($request)) {
 		// Limit batch size
 		if (count($request) > 20) {
 			http_response_code(413);
@@ -256,6 +261,13 @@ try {
 				"jsonrpc" => "2.0",
 				"error" => ["code" => -32000, "message" => "Batch too large"]
 			]);
+			exit;
+		}
+
+		// JSON-RPC forbids an empty batch. Return one Invalid Request object,
+		// rather than the invalid empty response array [].
+		if (count($request) === 0) {
+			echo json_encode(["jsonrpc" => "2.0", "id" => null, "error" => ["code" => -32600, "message" => "Invalid Request"]]);
 			exit;
 		}
 
@@ -287,11 +299,14 @@ try {
 
 		// Answer to all MCP requests following the MCP protocol
 		foreach ($request as $req) {
+			$reqStart = microtime(true);
 			if (!is_array($req)) {
+				// A malformed batch member is an Invalid Request, not an item to
+				// silently discard. Keep processing the remaining batch members.
+				$responses[] = ["jsonrpc" => "2.0", "id" => null, "error" => ["code" => -32600, "message" => "Invalid Request"]];
 				continue;
 			}
 
-			$reqStart = microtime(true);
 			$res = $server->handleRequest($req);
 
 			if ($res !== null) {
