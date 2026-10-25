@@ -53,4 +53,18 @@ class McpToolSchemaTest extends PHPUnit\Framework\TestCase
 		$this->assertSame(array($enumValue), $schema['enum']);
 		$this->assertSame($defaultValue, $schema['default']);
 	}
+
+	public function testTupleItemsAreNormalizedIndividually()
+	{
+		$schema = McpTool::normalizeInputSchema(array(
+			'type' => 'array',
+			'items' => array(
+				array('const' => 'first'),
+				array('const' => 2),
+			),
+		));
+
+		$this->assertSame(array('first'), $schema['items'][0]['enum']);
+		$this->assertSame(array(2), $schema['items'][1]['enum']);
+	}
 }
