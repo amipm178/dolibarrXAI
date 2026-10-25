@@ -7,7 +7,7 @@
  */
 require_once dirname(__DIR__, 2).'/htdocs/ai/class/mcplogsanitizer.class.php';
 
-class McpLogSanitizerTest extends PHPUnit\\Framework\\TestCase
+class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 {
 	public function testRequestLogsOnlyArgumentKeys(): void
 	{
