@@ -1,5 +1,5 @@
 <?php
-/* Copyright (C) 2026 OpenAI contributors
+/* Copyright (C) 2026 amipm178/dolibarrXAI contributors
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,8 @@ class McpLogSanitizer
 			return array();
 		}
 
-		return array_map('strval', array_keys($arguments));
+		$keys = array_slice(array_keys($arguments), 0, 50);
+		return array_map(function ($key) { return substr((string) $key, 0, 100); }, $keys);
 	}
 
 	/**
