@@ -1005,13 +1005,13 @@ try {
 			$systemPrompt .= "\n\nREMINDER: write all user-facing text (message, question, answer) in the SAME LANGUAGE as the user's message.";
 
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog('parse_intent.php systemPrompt = '.$systemPrompt, LOG_DEBUG, 0, '_ai');
-				dol_syslog('parse_intent.php query = '.$query, LOG_DEBUG, 0, '_ai');
+				dol_syslog('parse_intent.php system prompt prepared', LOG_DEBUG, 0, '_ai');
+				dol_syslog('parse_intent.php user query received (content redacted)', LOG_DEBUG, 0, '_ai');
 			}
 
 			// Sent as separate messages, so not in the systemPrompt (masked when privacy masking is on).
 			if (getDolGlobalString("AI_DEBUG")) {
-				dol_syslog('parse_intent.php history = '.json_encode($history, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOG_DEBUG, 0, '_ai');
+				dol_syslog('parse_intent.php conversation history prepared (content redacted; turns='.count($history).')', LOG_DEBUG, 0, '_ai');
 			}
 
 			// Call LLM and get answer string
@@ -1069,7 +1069,7 @@ try {
 				$clean = preg_replace('/[\r\n]/', ' ', $clean);
 
 				if (getDolGlobalString("AI_DEBUG")) {
-					dol_syslog('parse_intent.php response var clean='.$clean, LOG_DEBUG, 0, '_ai');
+					dol_syslog('parse_intent.php cleaned model response prepared (content redacted)', LOG_DEBUG, 0, '_ai');
 				}
 
 				// If answer is a json string or not
@@ -1081,7 +1081,7 @@ try {
 
 					$intentJSON = json_decode($clean, true);
 					if (getDolGlobalString("AI_DEBUG")) {
-						dol_syslog('parse_intent.php intentJSON = '.var_export($intentJSON, true), LOG_DEBUG, 0, '_ai');
+						dol_syslog('parse_intent.php model response parsed (content redacted)', LOG_DEBUG, 0, '_ai');
 					}
 
 					if (is_array($intentJSON) && ($intentJSON['tool'] ?? '') === 'respond_to_user') {
@@ -1232,7 +1232,7 @@ try {
 
 				// Comment this line (too verbose, kept for debug need)
 				if (getDolGlobalString("AI_DEBUG")) {
-					dol_syslog("parse_intent.php AI Intent: " . json_encode(['query' => $query, 'intent' => $intentJSON]), LOG_DEBUG, 0, '_ai');
+					dol_syslog("parse_intent.php AI intent parsed (query and arguments redacted)", LOG_DEBUG, 0, '_ai');
 				}
 
 				// Calculate confidence (only if not manually set to 1.0 above)
