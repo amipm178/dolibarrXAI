@@ -146,3 +146,5 @@ The continued review identified five additional security/privacy/reliability iss
 - AI debug logging: prompts, user queries, conversation history, cleaned model output and parsed intent/arguments are no longer written verbatim to logs when `AI_DEBUG` is enabled; metadata-only diagnostics remain. Runtime tests and PHP lint remain pending.
 
 - MCP authentication logging: a failed API-key lookup no longer writes the database driver's raw error to logs, avoiding accidental disclosure of SQL or credential-derived values.
+
+- MCP tool-call audit logs: argument keys are now passed through the existing allowlist-based sanitizer before logging, preventing attacker-controlled key names (including unusual text) from being copied into logs.
