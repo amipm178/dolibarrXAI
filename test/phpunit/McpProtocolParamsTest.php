@@ -7,7 +7,7 @@ if (!defined('DOL_DOCUMENT_ROOT')) {
 }
 require_once DOL_DOCUMENT_ROOT.'/ai/class/mcp_protocol.class.php';
 
-class McpProtocolParamsTest extends PHPUnit\\Framework\\TestCase
+class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 {
 	private function makeServerWithoutRuntime(): MCPServer
 	{
