@@ -58,7 +58,7 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 		);
 		$safe = McpLogSanitizer::sanitizeRequest($request);
 
-		$this->assertSame(100, strlen($safe['id']));
+		$this->assertSame('[string-id]', $safe['id']);
 		$this->assertSame(255, strlen($safe['params']['name']));
 	}
 
@@ -78,6 +78,23 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 	{
 		$keys = McpLogSanitizer::argumentKeys(array("customer\nforged-log-entry" => 'private-value'));
 		$this->assertSame(array('[redacted-key]'), $keys);
+	}
+
+	public function testRequestMetadataDoesNotLogUntrustedIdsOrNames(): void
+	{
+		$request = array(
+			'jsonrpc' => '2.0',
+			'id' => 'person@example.test',
+			'method' => 'unknown/private-method',
+			'params' => array('name' => 'person@example.test', 'arguments' => array())
+		);
+		$safe = McpLogSanitizer::sanitizeRequest($request);
+		$encoded = json_encode($safe);
+
+		$this->assertSame('[string-id]', $safe['id']);
+		$this->assertSame('[unknown]', $safe['method']);
+		$this->assertSame('[redacted]', $safe['params']['name']);
+		$this->assertStringNotContainsString('person@example.test', $encoded);
 	}
 
 	public function testUnknownArgumentKeysCannotLeakPersonalData(): void
