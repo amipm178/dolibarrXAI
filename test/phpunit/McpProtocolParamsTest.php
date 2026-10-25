@@ -15,6 +15,22 @@ class McpProtocolParamsTest extends PHPUnit\Framework\TestCase
 		return $reflection->newInstanceWithoutConstructor();
 	}
 
+	public function testInvalidRequestIdsAreNotEchoed(): void
+	{
+		$invalidIds = array(array('bad-id'), true, false);
+		foreach ($invalidIds as $index => $invalidId) {
+			$server = $this->makeServerWithoutRuntime();
+			$response = $server->handleRequest(array(
+				'jsonrpc' => '2.0',
+				'id' => $invalidId,
+				'method' => 'ping',
+				'params' => array()
+			));
+			$this->assertSame(-32600, $response['error']['code']);
+			$this->assertNull($response['id']);
+		}
+	}
+
 	public function testScalarParamsReturnInvalidParamsInsteadOfThrowing(): void
 	{
 		$server = $this->makeServerWithoutRuntime();
