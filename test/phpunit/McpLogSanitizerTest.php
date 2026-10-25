@@ -74,7 +74,7 @@ class McpLogSanitizerTest extends PHPUnit\Framework\TestCase
 		$this->assertSame('[redacted-key]', $keys[0]);
 	}
 
-	public function testControlCharactersAreRemovedFromLoggedArgumentKeys(): void
+	public function testUnknownKeysWithControlCharactersAreRedacted(): void
 	{
 		$keys = McpLogSanitizer::argumentKeys(array("customer\nforged-log-entry" => 'private-value'));
 		$this->assertSame(array('[redacted-key]'), $keys);
