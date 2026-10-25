@@ -108,3 +108,12 @@ The continued review identified five additional security/privacy/reliability iss
 - PHPUnit and full Dolibarr integration tests remain unexecuted because the test runner/Dolibarr environment is unavailable here. GitHub Actions has not returned a workflow run for the draft PR heads.
 - PRs #1–#11 were squash-merged into `XCODE`; the HTTP-envelope changes from PR #12 were applied directly to `XCODE` alongside the already-integrated audit sanitizer and shared-key authorization. PR #12 was closed to avoid a conflicting parallel patch.
 - All changes are now consolidated in the [`XCODE` branch](https://github.com/amipm178/dolibarrXAI/tree/XCODE). This is not a release sign-off: run the full PHPUnit suite and Dolibarr integration/security tests before deploying.
+
+
+### Follow-up audit (2026-10-25)
+
+- **JSON-RPC null IDs:** the protocol handler previously used `id === null` as the notification test, conflating a request with an explicit `"id": null` and a notification with no `id` field. It now tracks field presence separately. Regression coverage was added for null-ID success responses, null-ID errors, and genuine notifications.
+- **Audit metadata privacy:** MCP argument logging now retains only recognized argument names. Unknown keys are replaced by a fixed `[redacted-key]` marker, because client-controlled object keys can themselves contain personal or business data. Regression coverage includes email/name-like keys and keys containing control characters.
+- **Exception logging:** MCP tool execution and API-bridge hook failures now log the exception class instead of raw exception messages, which can include user input or business data.
+- **Verification still required:** these latest regression tests have not been executed in a compatible Dolibarr/PHPUnit environment. Add HTTP-level tests for batch members, empty batches, notifications, transport-header mismatches and status codes; then run PHP lint, the focused PHPUnit files and the full supported suite before deployment.
+- **Scope:** this follow-up audits the fork-specific XCODE changes and adjacent AI/MCP paths. It is not a line-by-line security audit of the entire upstream Dolibarr codebase.
