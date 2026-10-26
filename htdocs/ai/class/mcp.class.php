@@ -379,6 +379,13 @@ class McpHandler
 					$def['inputSchema'] = self::normalizeInputSchema($def['inputSchema']);
 				}
 
+				if ($isSystem && $this->toolcontext === self::CTX_MCP_SERVER) {
+					// System tools (respond_to_user, ask_for_confirmation...) drive the chat of the
+					// assistant UI. An external MCP client must neither see nor call them, and the
+					// allow-list must keep the last word on what is exposed there.
+					continue;
+				}
+
 				if ($isSystem) {
 					// Always include system tools but tag them so parse_intent.php
 					// can strip them from $toolsForLLM while keeping them available
@@ -571,6 +578,9 @@ class McpHandler
 		require_once DOL_DOCUMENT_ROOT.'/ai/class/writeconfirmation.class.php';
 		$gate = new AiWriteConfirmation($this->db);
 
+		if (isset($args['requestState']) && !is_string($args['requestState'])) {
+			return array('error' => 'Invalid confirmation state');
+		}
 		$state = isset($args['requestState']) ? (string) $args['requestState'] : '';
 		if ($state !== '') {
 			if ($gate->consume($this->user, $toolName, $args, $state)) {
@@ -641,7 +651,12 @@ class McpHandler
 
 		$toolInstance = $this->toolsByName[$toolName];
 
-		// enforce tool context allow-list (system tools always pass through)
+		// System tools exist for the assistant UI only: an MCP client is answered as if they did not exist.
+		if ($this->toolcontext === self::CTX_MCP_SERVER && $this->isSystemTool($toolInstance)) {
+			return array('error' => "Tool '".$toolName."' not found.");
+		}
+
+		// enforce tool context allow-list (system tools always pass through in the assistant context)
 		if (!$this->isSystemTool($toolInstance)) {
 			$allowed = $this->getAllowedToolsList();
 
@@ -656,7 +671,8 @@ class McpHandler
 
 		// execute
 		try {
-			dol_syslog('[McpHandler] Executing tool \'' . $toolName . '\' with args: ' . json_encode($args), LOG_INFO);
+			// Argument names only: the values are business data (names, amounts, free text).
+			dol_syslog('[McpHandler] Executing tool \'' . $toolName . '\' with arguments: ' . implode(',', array_map('strval', array_keys($args))), LOG_INFO);
 			$missingRight = $this->checkToolRights($toolInstance, $toolName);
 			if ($missingRight !== '') {
 				return array('error' => ($missingRight === 'undeclared')
