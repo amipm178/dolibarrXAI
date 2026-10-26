@@ -199,7 +199,7 @@ try {
 		if ($ctxId > 0 && isset($ctxMap[$ctxElement]) && $user->hasRight($ctxMap[$ctxElement][3], $ctxMap[$ctxElement][4], $ctxMap[$ctxElement][5] ?? '')) {
 			require_once DOL_DOCUMENT_ROOT.$ctxMap[$ctxElement][0];
 			$ctxObj = new $ctxMap[$ctxElement][1]($db);
-			if ($ctxObj->fetch($ctxId) > 0 && (empty($ctxObj->entity) || in_array((int) $ctxObj->entity, explode(',', getEntity($ctxElement))))) {
+			if ($ctxObj->fetch($ctxId) > 0 && (empty($ctxObj->entity) || in_array((int) $ctxObj->entity, explode(',', getEntity($ctxElement)))) && aiUserMaySeeContextObject($db, $user, $ctxElement, $ctxObj)) {
 				$ctxThirdpartyName = '';
 				if (empty($doRedact) && !empty($ctxObj->socid)) {
 					// The counterparty NAME lets the model use name-based search
@@ -1480,6 +1480,40 @@ try {
 	echo json_encode($friendlyResponse);
 }
 
+
+/**
+ * May the user see the record whose card is posted as page context?
+ *
+ * The context is client-controlled: the read right on the element is checked above, but fetch()
+ * does not apply the visibility rules the lists apply, so a forged context would hand the ref and
+ * the third party name of any record to the model (and so to the answer). Same rules as the lists:
+ * an external user sees its own company only, an internal user without "see all customers" the
+ * third parties they follow.
+ *
+ * @param DoliDB $db      Database handler
+ * @param User   $user    User
+ * @param string $element Element of the context
+ * @param object $obj     Fetched record
+ * @return bool           True when the record may feed the prompt
+ */
+function aiUserMaySeeContextObject($db, $user, $element, $obj)
+{
+	$socid = ($element === 'societe') ? (int) $obj->id : (int) (!empty($obj->socid) ? $obj->socid : (!empty($obj->fk_soc) ? $obj->fk_soc : 0));
+
+	if (!empty($user->socid)) {
+		return ($socid > 0 && $socid === (int) $user->socid);
+	}
+	if ($socid > 0 && !$user->hasRight('societe', 'client', 'voir')) {
+		$sql = "SELECT COUNT(*) as nb FROM ".$db->prefix()."societe_commerciaux";
+		$sql .= " WHERE fk_soc = ".((int) $socid)." AND fk_user = ".((int) $user->id);
+		$resql = $db->query($sql);
+		$objres = $resql ? $db->fetch_object($resql) : null;
+
+		return ($objres && (int) $objres->nb > 0);
+	}
+
+	return true;
+}
 
 /**
  * Does the user's message ask for a write (create / update / delete / ...)?

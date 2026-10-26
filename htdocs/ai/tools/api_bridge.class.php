@@ -5328,7 +5328,14 @@ class ToolApiBridge extends McpTool
 				&& (empty($writemeta) || empty($methodmeta['params']) || array_key_exists($pname, $methodmeta['params'])
 					|| in_array($writekind, array('update', 'action', 'delete', 'payment'), true))) {
 				// Cap an explicit 'limit': one call must not pull thousands of full objects.
-				$callArgs[] = ($pname == 'limit') ? min((int) $args[$pname], self::BRIDGE_MAX_LIMIT) : $args[$pname];
+				if ($pname == 'limit') {
+					// In the Dolibarr API a limit of 0 (or less) means "no limit": min(0, MAX) let a model
+					// (or a client of the MCP server) pull the whole table with one call.
+					$limitarg = (int) $args[$pname];
+					$callArgs[] = ($limitarg <= 0) ? self::BRIDGE_DEFAULT_LIMIT : min($limitarg, self::BRIDGE_MAX_LIMIT);
+				} else {
+					$callArgs[] = $args[$pname];
+				}
 			} elseif ($p->isOptional()) {
 				// Bridge default for an omitted 'limit' is smaller than the API's 100.
 				$callArgs[] = ($pname == 'limit') ? self::BRIDGE_DEFAULT_LIMIT : $p->getDefaultValue();
