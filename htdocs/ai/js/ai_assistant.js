@@ -2292,9 +2292,14 @@ export function initAiAssistant(container) {
         resetUI(); isConfirmationListening = false;
         if (!rawText) { showVoiceFeedback(t('PleaseRepeat')); return; }
         const cmd = rawText.toLowerCase(); console.log("Confirmation Cmd:", cmd);
-        if (cmd.includes('yes') || cmd.includes('sure') || cmd.includes('confirm') || cmd.includes('proceed')) confirmAction();
-        else if (cmd.includes('no') || cmd.includes('stop') || cmd.includes('cancel') || cmd.includes('don')) cancelAction();
-        else showVoiceFeedback(`${t('HeardText')} "${rawText}".`);
+        // A refusal wins over an agreement ("do not proceed", "don't confirm" contain 'proceed' / 'confirm'),
+        // and words are matched as words ('no' used to match 'know', 'not', 'nothing'...).
+        // Anything that confirms a write must be unambiguous: when in doubt, ask again.
+        const refusal = /\b(no|nope|stop|cancel|abort|never|not|don'?t|do not)\b/.test(cmd);
+        const agreement = /\b(yes|yeah|yep|sure|confirm|proceed)\b/.test(cmd);
+        if (refusal) cancelAction();
+        else if (agreement) confirmAction();
+        else showVoiceFeedback(`${t('HeardText')} "${escapeHtml(rawText)}".`);
     }
 
     function confirmAction() {
