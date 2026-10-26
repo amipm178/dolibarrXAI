@@ -79,8 +79,13 @@ try {
 	$raw = file_get_contents('php://input');
 	$input = json_decode($raw, true);
 
-	if (!$input || empty($input['tool'])) {
+	if (!is_array($input) || empty($input['tool']) || !is_string($input['tool'])) {
 		throw new Exception("Invalid Request: No tool specified.");
+	}
+	// executeTool() is typed (string, array): a wrong type used to end as a TypeError whose
+	// message (internal class and method names) was sent back to the browser.
+	if (isset($input['arguments']) && !is_array($input['arguments'])) {
+		throw new Exception("Invalid Request: arguments must be an object.");
 	}
 
 	// Initialize Handler with the private assistant context so that the correct
@@ -136,7 +141,13 @@ try {
 } catch (Throwable $e) {
 	// Set HTTP response code to error (400 Bad Request)
 	http_response_code(400);
-	$toolName = (isset($input) && is_array($input) && !empty($input['tool'])) ? (string) $input['tool'] : '';
+	$toolName = (isset($input) && is_array($input) && !empty($input['tool']) && is_string($input['tool'])) ? $input['tool'] : '';
+	// Messages thrown on purpose above are for the user; anything else (TypeError, database
+	// error...) stays in the syslog.
+	$publicError = ($e instanceof Exception) ? $e->getMessage() : 'Internal error';
+	if (!($e instanceof Exception)) {
+		dol_syslog('execute_tool.php: '.get_class($e).': '.$e->getMessage(), LOG_ERR);
+	}
 	ai_log_request(
 		$db,
 		$user,
@@ -146,9 +157,9 @@ try {
 		0.0,
 		0.0,
 		'Error',
-		$e->getMessage(),
+		$publicError,
 		isset($raw) && is_string($raw) ? $raw : '',
 		''
 	);
-	echo json_encode(["error" => $e->getMessage()]);
+	echo json_encode(["error" => $publicError]);
 }
