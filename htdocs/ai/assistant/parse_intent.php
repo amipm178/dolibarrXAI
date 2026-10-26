@@ -1017,7 +1017,8 @@ try {
 
 				// Unmask the JSON string
 				if ($guard) {
-					$clean = $guard->unmaskAiResponse($clean);
+					// JSON text: the restored values are escaped (a name with a double quote broke the JSON)
+					$clean = $guard->unmaskAiResponse($clean, true);
 				}
 
 				// Removed carriage returns and newlines
