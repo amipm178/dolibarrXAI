@@ -115,6 +115,11 @@ $json = GETPOST('content', 'none');
 if (empty($json)) {
 	$json = file_get_contents('php://input');
 }
+if (!is_string($json) || strlen($json) > 5 * 1024 * 1024) {
+	http_response_code(413);
+	print "Error: data too large.";
+	exit;
+}
 
 // Validate JSON structure
 $data = json_decode($json, true);
@@ -142,7 +147,8 @@ if (!preg_match('/\.pdf$/i', $filename)) {
 	$filename .= '.pdf';
 }
 
-if (!$data) {
+// A JSON scalar decodes fine but is not something a table can be built from.
+if (!is_array($data) || empty($data)) {
 	print "No data provided for PDF generation.";
 	exit;
 }
@@ -188,7 +194,7 @@ try {
 	</style>';
 
 	// Overview / Dashboard (complex object)
-	if (isset($data['customer']) && isset($data['details'])) {
+	if (isset($data['customer']) && is_array($data['customer']) && isset($data['details']) && is_array($data['details'])) {
 		// Customer Info
 		$html .= '<h3>' . $langs->trans('ThirdpartyDetails') . '</h3>';
 		$html .= '<table cellpadding="4">';
@@ -197,7 +203,7 @@ try {
 			if ($k === 'url' || $k === 'id' || $k === 'rowid') {
 				continue;
 			}
-			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst($k)) . '</td><td class="val">' . dol_escape_htmltag($v) . '</td></tr>';
+			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst((string) $k)) . '</td><td class="val">' . dol_escape_htmltag(is_scalar($v) ? (string) $v : (string) json_encode($v)) . '</td></tr>';
 		}
 		$html .= '</table>';
 
@@ -209,7 +215,13 @@ try {
 			if (empty($rows) || !is_array($rows)) {
 				$html .= '<p>' . $langs->trans('NoDataAvailable') . '</p>';
 			} else {
-				// Table Builder for List
+				// Table Builder for List. The rows may be keyed (not a list) or hold scalars: only
+				// the array rows can be rendered, and $rows[0] is not guaranteed to exist.
+				$rows = array_values(array_filter($rows, 'is_array'));
+				if (empty($rows)) {
+					$html .= '<p>' . $langs->trans('NoDataAvailable') . '</p>';
+					continue;
+				}
 				$keys = array_keys($rows[0]);
 				$keys = array_filter(
 					$keys,
@@ -284,15 +296,16 @@ try {
 			if ($key === 'url') {
 				continue;
 			}
-			$valStr = is_array($val) ? json_encode($val) : $val;
-			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst($key)) . '</td><td class="val">' . dol_escape_htmltag($valStr) . '</td></tr>';
+			$valStr = is_scalar($val) ? (string) $val : (string) json_encode($val);
+			$html .= '<tr><td class="key">' . dol_escape_htmltag(ucfirst((string) $key)) . '</td><td class="val">' . dol_escape_htmltag($valStr) . '</td></tr>';
 		}
 		$html .= '</table>';
 	}
 
 	$pdf->writeHTML($html, true, false, true, false, '');
 	$pdf->Output($filename, 'D');
-} catch (Exception $e) {
+} catch (\Throwable $e) {
+	// Throwable: the TypeErrors raised on malformed rows are not Exceptions.
 	dol_syslog("Error generating PDF: " . $e->getMessage(), LOG_ERR);
 	print "PDF Error: Unable to generate PDF. Please contact administrator.";
 	exit;

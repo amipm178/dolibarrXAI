@@ -142,6 +142,14 @@ try {
 		if ($raw === '' && $html === '') {
 			throw new Exception('Empty message');
 		}
+		// content_raw is a TEXT column (64 KB): an oversized value made the INSERT fail (or be truncated
+		// without strict mode). Cut it on a character boundary. The HTML bubble is a MEDIUMTEXT.
+		if (strlen($raw) > 60000) {
+			$raw = (string) mb_strcut($raw, 0, 60000, 'UTF-8');
+		}
+		if (strlen($html) > 1000000) {
+			$html = '';
+		}
 
 		// The stored HTML is re-injected on reopen: sanitize it at SAVE time with
 		// the core whitelist, so nothing executable can ever be persisted. Action
@@ -190,17 +198,23 @@ try {
 		// Ownership travels through the conversation. 'error' (optional) marks a
 		// turn that must stay out of the context window on reopen, e.g. the
 		// question behind an action the user cancelled.
-		$sql = "UPDATE ".$db->prefix()."ai_chat_message as m";
-		$sql .= " INNER JOIN ".$db->prefix()."ai_chat_conversation as c ON c.rowid = m.fk_conversation AND c.fk_user = ".((int) $user->id);
-		$sql .= " SET m.pinned = ".((int) $pinned).(isset($input['error']) ? ", m.is_error = ".(empty($input['error']) ? 0 : 1) : "")." WHERE m.rowid = ".((int) $msgid);
-		$resql = $db->query($sql);
-		if (!$resql) {
-			throw new Exception($db->lasterror());
-		}
-		// A message that is not the caller's (or does not exist) matches no row:
-		// say so, a silent "ok" would let the client believe the pin was kept
-		if ($db->affected_rows($resql) < 1) {
+		// Ownership is checked by a SELECT, then a plain UPDATE is issued: the UPDATE ... JOIN ... SET form
+		// only exists on MySQL (Dolibarr also runs on PostgreSQL), and on MySQL an UPDATE that changes
+		// nothing reports 0 affected rows, so pinning an already pinned message answered "not found".
+		$sqlown = "SELECT m.rowid FROM ".$db->prefix()."ai_chat_message as m";
+		$sqlown .= " INNER JOIN ".$db->prefix()."ai_chat_conversation as c ON c.rowid = m.fk_conversation";
+		$sqlown .= " WHERE m.rowid = ".((int) $msgid)." AND c.fk_user = ".((int) $user->id)." AND c.entity = ".((int) getEntity('ai'));
+		$resown = $db->query($sqlown);
+		// A message that is not the caller's (or does not exist) is reported:
+		// a silent "ok" would let the client believe the pin was kept
+		if (!$resown || $db->num_rows($resown) < 1) {
 			throw new Exception('Message not found');
+		}
+		$sql = "UPDATE ".$db->prefix()."ai_chat_message";
+		$sql .= " SET pinned = ".((int) $pinned).(isset($input['error']) ? ", is_error = ".(empty($input['error']) ? 0 : 1) : "");
+		$sql .= " WHERE rowid = ".((int) $msgid);
+		if (!$db->query($sql)) {
+			throw new Exception($db->lasterror());
 		}
 		$out['ok'] = 1;
 	} elseif ($action === 'rename') {

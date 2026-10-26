@@ -45,6 +45,7 @@ if (!defined('NOREQUIRESOC')) {
 require '../../main.inc.php';
 
 require_once DOL_DOCUMENT_ROOT.'/ai/class/ai.class.php';
+require_once DOL_DOCUMENT_ROOT.'/ai/lib/ai.lib.php';
 
 /**
  * @var Conf $conf
@@ -58,6 +59,17 @@ if (!isModEnabled('ai')) {
 	accessforbidden('Module AI not enabled');
 }
 
+// Every call is billed by the AI provider: an external user (customer or supplier portal account)
+// has no reason to reach this endpoint, whatever the rights of its group.
+if (!empty($user->socid)) {
+	accessforbidden();
+}
+
+// The payload is read from the raw body, which main.inc.php does not protect against CSRF
+// (the check is optional and only reads $_GET/$_POST): the token sent in the URL by
+// html.formai.class.php is checked explicitly, like on the other AI endpoints.
+aiCheckCsrfToken('ai/ajax/generate_content.php');
+
 
 /*
  * View
@@ -69,22 +81,36 @@ top_httphead();
 $rawData = file_get_contents('php://input');
 $jsonData = json_decode($rawData, true);
 
-if (is_null($jsonData)) {
-	dol_print_error($db, 'data in POST has not a valid JSON format.');
+if (!is_array($jsonData)) {
+	// Used to go on with a null payload and to call the provider with an empty prompt.
+	http_response_code(400);
+	print "Error : data in POST has not a valid JSON format.";
+	exit;
 }
 $ai = new Ai($db);
 
 // Get parameters
 // Default value is 'textgeneration'.
 // Can also be 'textgeneration', 'textgenerationemail', 'textgenerationwebpage', 'textrephraser', 'textspellchecker', 'imagegeneration', 'videogeneration', ...
-$function = empty($jsonData['function']) ? 'textgeneration' : $jsonData['function'];
+$function = (empty($jsonData['function']) || !is_string($jsonData['function']) || !preg_match('/^[a-z]+$/i', $jsonData['function'])) ? 'textgeneration' : $jsonData['function'];
 
-$format = empty($jsonData['format']) ? '' : $jsonData['format'];						// Can be '' for text, 'html', ...
+$format = (empty($jsonData['format']) || !is_string($jsonData['format'])) ? '' : $jsonData['format'];						// Can be '' for text, 'html', ...
 
-if ($format == "html") {
-	$instructions = $jsonData['instructions'];
-} else {
-	$instructions = dol_string_nohtmltag($jsonData['instructions'], 2, 'UTF-8');
+$instructions = (isset($jsonData['instructions']) && is_string($jsonData['instructions'])) ? $jsonData['instructions'] : '';
+if ($format != "html") {
+	$instructions = dol_string_nohtmltag($instructions, 2, 'UTF-8');
+}
+
+// Refuse before calling the provider: the empty check used to run after the (billed) API call.
+if (trim($instructions) === '') {
+	http_response_code(400);
+	print "Error : empty message.";
+	exit;
+}
+if (dol_strlen($instructions) > 100000) {
+	http_response_code(413);
+	print "Error : message too long.";
+	exit;
 }
 
 
@@ -96,20 +122,21 @@ $generatedContent = $ai->generateContent($instructions, 'auto', $function, $form
 if (empty($instructions)) {
 	http_response_code(400);
 	print "Error : empty message.";
-} elseif (is_null($generatedContent) || (is_array($generatedContent) && $generatedContent['error'])) {
+} elseif (is_null($generatedContent) || (is_array($generatedContent) && !empty($generatedContent['error']))) {
 	// Output error
 	if (!empty($generatedContent['code']) && $generatedContent['code'] == 429) {
 		http_response_code($generatedContent['code']);
 		print "Quota or allowed period exceeded. Retry Later !";
 	} elseif (!empty($generatedContent['code']) && $generatedContent['code'] >= 400) {
 		http_response_code($generatedContent['code']);
-		print "Error : " . $generatedContent['message'];
+		// The message comes from the provider: it is text, never markup.
+		print "Error : " . dol_escape_htmltag((string) $generatedContent['message']);
 		print '<br><a href="'.DOL_MAIN_URL_ROOT.'/ai/admin/setup.php">'.$langs->trans('ErrorGoToModuleSetup').'</a>';
 	} elseif (!empty($generatedContent['message'])) {
 		if (!empty($generatedContent['code'])) {
 			http_response_code($generatedContent['code']);
 		}
-		print "Error returned by API call: " . $generatedContent['message'];
+		print "Error returned by API call: " . dol_escape_htmltag((string) $generatedContent['message']);
 	} else {
 		if (!empty($generatedContent['code'])) {
 			http_response_code($generatedContent['code']);
