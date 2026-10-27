@@ -350,6 +350,13 @@ function ai_validate_attachments(array $attachments, &$error)
 	$maxbytes = getDolGlobalInt('AI_ATTACHMENT_MAX_MB', 10) * 1024 * 1024;
 	$totalbytes = 0;
 	foreach ($attachments as $att) {
+		// The attachments come from the browser: an entry that is not {mime: string, data: string}
+		// raised a TypeError on strlen() / an undefined index.
+		if (!is_array($att) || !isset($att['mime'], $att['data']) || !is_string($att['mime']) || !is_string($att['data'])) {
+			$error = $langs->trans("AIAttachmentTypeNotAllowed", '?');
+
+			return false;
+		}
 		if (!in_array($att['mime'], $allowedmimes, true)) {
 			$error = $langs->trans("AIAttachmentTypeNotAllowed", $att['mime']);
 

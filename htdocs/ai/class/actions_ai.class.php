@@ -213,6 +213,9 @@ class ActionsAi
 			// Dolibarr's list search form submits by POST, so a filter the user
 			// just typed never appears in $_GET: read both, GET last so a
 			// bookmarked/paginated URL wins over a stale POST body.
+			// The filters come from the URL: they are printed inside an inline script, so the JSON is
+			// encoded with JSON_HEX_TAG (a value like <!--<script> changes how the browser reads the
+			// script element, and the default encoding only escapes the slash of </script>).
 			$filters = array();
 			foreach (array_merge($_POST, $_GET) as $k => $v) {
 				if (!is_string($v) || $v === '' || strlen($v) > 200) {
@@ -260,7 +263,7 @@ class ActionsAi
 				$urlRoot = (string) constant('DOL_URL_ROOT');
 				$rel = ($urlRoot !== '' && strpos($self, $urlRoot) === 0) ? substr($self, strlen($urlRoot)) : $self;
 				if (isset($dashboards[$rel])) {
-					print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode(array('dashboard' => $dashboards[$rel])).';</script>'."\n";
+					print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode(array('dashboard' => $dashboards[$rel]), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).';</script>'."\n";
 
 					return 0;
 				}
@@ -270,7 +273,7 @@ class ActionsAi
 				if (!empty($this->listRowIds)) {
 					$ctx['ids'] = $this->listRowIds;	// rows this page actually shows
 				}
-				print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode($ctx).';</script>'."\n";
+				print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode($ctx, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).';</script>'."\n";
 			}
 
 			return 0;
@@ -285,7 +288,7 @@ class ActionsAi
 
 		// printCommonFooter output convention: print directly (the caller does
 		// not echo resPrint for this hook).
-		print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode($context).';</script>'."\n";
+		print "\n".'<script nonce="'.getNonce().'">window.aiPageContext = '.json_encode($context, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).';</script>'."\n";
 
 		return 0;
 	}
