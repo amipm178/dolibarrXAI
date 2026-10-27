@@ -237,15 +237,23 @@ class ToolReports extends McpTool
 	{
 
 		if (!empty($args['thirdparty_id'])) {
-			return (int) $args['thirdparty_id'];
+			// An id typed by the model (or a client of the MCP server) must be one the user may see
+			$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . "societe WHERE rowid = " . ((int) $args['thirdparty_id'])
+				. " AND entity IN (" . getEntity('societe') . ")" . $this->thirdpartyScopeSql('rowid');
+			$resql = $this->db->query($sql);
+			if ($resql && $obj = $this->db->fetch_object($resql)) {
+				return (int) $obj->rowid;
+			}
+
+			return null;
 		}
 
 		if (!empty($args['thirdparty_name'])) {
-			$sqlName = $this->db->escape($args['thirdparty_name']);
+			$sqlName = $this->db->escape($this->db->escapeforlike((string) $args['thirdparty_name']));
 
 			$sql = "SELECT rowid FROM " . MAIN_DB_PREFIX . "societe
 			WHERE nom LIKE '%" . $sqlName . "%'
-			AND entity IN (" . getEntity('societe') . ")
+			AND entity IN (" . getEntity('societe') . ")" . $this->thirdpartyScopeSql('rowid') . "
 			LIMIT 1";
 
 			$resql = $this->db->query($sql);
@@ -255,6 +263,47 @@ class ToolReports extends McpTool
 		}
 
 		return null;
+	}
+
+	/**
+	 * Condition limiting a query to the third parties the user may see.
+	 *
+	 * The reports query the tables directly, so the visibility rules of the lists do not apply by
+	 * themselves: an external user sees its own company only, an internal user without the right
+	 * "see all customers" the third parties they follow. Without a user nothing is visible.
+	 *
+	 * @param string $column Column holding the third party id (fk_soc, f.fk_soc, rowid...)
+	 * @return string        Condition starting with AND, or ''
+	 */
+	private function thirdpartyScopeSql($column)
+	{
+		if (!is_object($this->user)) {
+			return ' AND '.$column.' < 0';
+		}
+		if (!empty($this->user->socid)) {
+			return ' AND '.$column.' = '.((int) $this->user->socid);
+		}
+		if (!$this->user->hasRight('societe', 'client', 'voir')) {
+			$followed = 'SELECT sc.fk_soc FROM '.MAIN_DB_PREFIX.'societe_commerciaux as sc WHERE sc.fk_user = '.((int) $this->user->id);
+
+			return ' AND '.$column.' IN ('.$followed.')';
+		}
+
+		return '';
+	}
+
+	/**
+	 * Answer of a report called without a usable date range.
+	 *
+	 * An unparsable date became 1970-01-01 and the report came back empty, without a word.
+	 *
+	 * @return array<int, array<string, string>> One row carrying the error
+	 */
+	private function invalidDateRange()
+	{
+		global $langs;
+
+		return [[$langs->transnoentitiesnoconv("Error") => 'date_start and date_end are required (YYYY-MM-DD), date_start must not be after date_end']];
 	}
 
 	/**
@@ -269,9 +318,12 @@ class ToolReports extends McpTool
 
 		$langs->loadLangs(array("main", "bills", "companies", "products"));
 
-		$limit     = isset($args['limit']) ? (int) $args['limit'] : 50;
-		$dateStart = dol_stringtotime($args['date_start']);
-		$dateEnd   = dol_stringtotime($args['date_end']);
+		$limit     = isset($args['limit']) ? min(max(1, (int) $args['limit']), 500) : 50;
+		$dateStart = dol_stringtotime(isset($args['date_start']) ? (string) $args['date_start'] : '');
+		$dateEnd   = dol_stringtotime(isset($args['date_end']) ? (string) $args['date_end'] : '');
+		if (empty($dateStart) || empty($dateEnd) || $dateStart > $dateEnd) {
+			return $this->invalidDateRange();
+		}
 		$socid     = $this->resolveThirdparty($args);
 		$groupBy   = isset($args['group_by']) ? (string) $args['group_by'] : 'thirdparty';
 
@@ -289,7 +341,7 @@ class ToolReports extends McpTool
 			$sql = "SELECT f.rowid, f.ref, f.total_ttc, f.fk_statut, f.paye, f.datef, s.nom FROM "
 				. MAIN_DB_PREFIX . "facture as f LEFT JOIN "
 				. MAIN_DB_PREFIX . "societe as s ON f.fk_soc = s.rowid WHERE f.entity IN ("
-				. getEntity('facture') . ")"
+				. getEntity('facture') . ")" . $this->thirdpartyScopeSql('f.fk_soc')
 				. $dateRange
 				. " AND f.fk_soc = " . (int) $socid
 				. " ORDER BY f.datef DESC LIMIT " . ((int) $limit);
@@ -354,7 +406,7 @@ class ToolReports extends McpTool
 				. $countExpr . " as count_inv FROM "
 				. MAIN_DB_PREFIX . "facture as f"
 				. $sqlJoin
-				. " WHERE f.entity IN (" . getEntity('facture') . ")"
+				. " WHERE f.entity IN (" . getEntity('facture') . ")" . $this->thirdpartyScopeSql('f.fk_soc')
 				. $dateRange
 				. " GROUP BY group_key ORDER BY total_amount DESC LIMIT "
 				. ((int) max(1, $limit));
@@ -424,8 +476,11 @@ class ToolReports extends McpTool
 
 		$langs->loadLangs(array("main", "bills", "orders", "propal"));
 
-		$dateStart = dol_stringtotime($args['date_start']);
-		$dateEnd = dol_stringtotime($args['date_end']);
+		$dateStart = dol_stringtotime(isset($args['date_start']) ? (string) $args['date_start'] : '');
+		$dateEnd = dol_stringtotime(isset($args['date_end']) ? (string) $args['date_end'] : '');
+		if (empty($dateStart) || empty($dateEnd) || $dateStart > $dateEnd) {
+			return $this->invalidDateRange();
+		}
 		$type = isset($args['transaction_type']) ? (string) $args['transaction_type'] : 'all';
 
 		$socid = $this->resolveThirdparty($args);
@@ -566,8 +621,11 @@ class ToolReports extends McpTool
 
 		$socid = $this->resolveThirdparty($args);
 		$groupBy = isset($args['group_by']) ? (string) $args['group_by'] : 'supplier';
-		$dateStart = dol_stringtotime($args['date_start']);
-		$dateEnd = dol_stringtotime($args['date_end']);
+		$dateStart = dol_stringtotime(isset($args['date_start']) ? (string) $args['date_start'] : '');
+		$dateEnd = dol_stringtotime(isset($args['date_end']) ? (string) $args['date_end'] : '');
+		if (empty($dateStart) || empty($dateEnd) || $dateStart > $dateEnd) {
+			return $this->invalidDateRange();
+		}
 		$list = [];
 		$totalSum = 0.0;
 		$chartLabels = [];
@@ -578,7 +636,7 @@ class ToolReports extends McpTool
 			$sql = "SELECT f.rowid, f.ref, f.total_ttc, f.datef, s.nom
 					FROM " . MAIN_DB_PREFIX . "facture_fourn as f
 					LEFT JOIN " . MAIN_DB_PREFIX . "societe as s ON f.fk_soc = s.rowid
-					WHERE f.entity IN (" . getEntity('facture_fourn') . ")
+					WHERE f.entity IN (" . getEntity('facture_fourn') . ")" . $this->thirdpartyScopeSql('f.fk_soc') . "
 					AND f.fk_soc = " . (int) $socid . "
 					AND f.datef >= '" . $this->db->idate($dateStart) . "'
 					AND f.datef <= '" . $this->db->idate($dateEnd) . "'
@@ -617,7 +675,7 @@ class ToolReports extends McpTool
 			$sql = "SELECT " . $sanitizedSqlGroup . " as group_key, SUM(f.total_ttc) as total_amount, COUNT(f.rowid) as count_inv
 				FROM " . MAIN_DB_PREFIX . "facture_fourn as f
 				LEFT JOIN " . MAIN_DB_PREFIX . "societe as s ON f.fk_soc = s.rowid
-				WHERE f.entity IN (" . getEntity('facture_fourn') . ")
+				WHERE f.entity IN (" . getEntity('facture_fourn') . ")" . $this->thirdpartyScopeSql('f.fk_soc') . "
 				AND f.datef >= '" . $this->db->idate($dateStart) . "'
 				AND f.datef <= '" . $this->db->idate($dateEnd) . "'
 				AND f.fk_statut > 0
@@ -770,12 +828,15 @@ class ToolReports extends McpTool
 		global $langs;
 
 		$langs->loadLangs(array("compta", "bills"));
-		$dateStart = dol_stringtotime($args['date_start']);
-		$dateEnd = dol_stringtotime($args['date_end']);
+		$dateStart = dol_stringtotime(isset($args['date_start']) ? (string) $args['date_start'] : '');
+		$dateEnd = dol_stringtotime(isset($args['date_end']) ? (string) $args['date_end'] : '');
+		if (empty($dateStart) || empty($dateEnd) || $dateStart > $dateEnd) {
+			return $this->invalidDateRange();
+		}
 
 		// Income (Customer Invoices - Validated/Paid, no Drafts)
 		$sqlIncome = "SELECT SUM(total_ttc) as total FROM " . MAIN_DB_PREFIX . "facture
-					  WHERE entity IN (" . getEntity('facture') . ")
+					  WHERE entity IN (" . getEntity('facture') . ")" . $this->thirdpartyScopeSql('fk_soc') . "
 					  AND datef >= '" . $this->db->idate($dateStart) . "'
 					  AND datef <= '" . $this->db->idate($dateEnd) . "'
 					  AND fk_statut IN (1, 2)";
@@ -786,7 +847,7 @@ class ToolReports extends McpTool
 
 		// Expenses (Supplier Invoices - Validated, no Drafts)
 		$sqlExpense = "SELECT SUM(total_ttc) as total FROM " . MAIN_DB_PREFIX . "facture_fourn
-					   WHERE entity IN (" . getEntity('facture_fourn') . ")
+					   WHERE entity IN (" . getEntity('facture_fourn') . ")" . $this->thirdpartyScopeSql('fk_soc') . "
 					   AND datef >= '" . $this->db->idate($dateStart) . "'
 					   AND datef <= '" . $this->db->idate($dateEnd) . "'
 					   AND fk_statut > 0";
