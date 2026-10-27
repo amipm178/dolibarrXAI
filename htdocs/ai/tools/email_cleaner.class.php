@@ -244,13 +244,15 @@ class ToolEmailCleaner extends McpTool
 			$sql .= " AND fk_actioncomm = ".((int) $actioncommId);
 		}
 		if ($collectorId > 0) {
-			$sql .= " AND raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId)."%'";
+			// The id must end where the number ends: LIKE '%"collector_id":5%' also matched 50, 51, 512...
+			$sql .= " AND (raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId).",%'";
+			$sql .= " OR raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId)."}%')";
 		}
 		if ($messageId !== '') {
-			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($messageId)."%'";
+			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($this->db->escapeforlike($messageId))."%'";
 		}
 		if ($contextProfileCode !== '') {
-			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($contextProfileCode)."%'";
+			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($this->db->escapeforlike($contextProfileCode))."%'";
 		}
 		if ($minConfidence !== null) {
 			$sql .= " AND confidence >= ".((float) $minConfidence);
@@ -330,9 +332,11 @@ class ToolEmailCleaner extends McpTool
 		if ($aiRequestLogId > 0) {
 			$sql .= " AND rowid = ".((int) $aiRequestLogId);
 		} elseif ($messageId !== '') {
-			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($messageId)."%'";
+			$sql .= " AND raw_request_payload LIKE '%".$this->db->escape($this->db->escapeforlike($messageId))."%'";
 			if ($collectorId > 0) {
-				$sql .= " AND raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId)."%'";
+				// The id must end where the number ends: LIKE '%"collector_id":5%' also matched 50, 51, 512...
+				$sql .= " AND (raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId).",%'";
+				$sql .= " OR raw_request_payload LIKE '%\"collector_id\":".((int) $collectorId)."}%')";
 			}
 			$sql .= " ORDER BY rowid DESC";
 		} else {
