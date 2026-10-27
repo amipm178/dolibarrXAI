@@ -367,7 +367,7 @@ class FormAI extends Form
 						console.log('Received image URL: '+response);
 
 						// make substitutions
-						let substit = ". json_encode($this->substit).";
+						let substit = ". json_encode($this->substit, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT).";
 						for (let key in substit) {
 							if (substit.hasOwnProperty(key)) {
 								// Replace the placeholder with its corresponding value
