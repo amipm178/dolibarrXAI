@@ -697,7 +697,8 @@ class EmailCleaner
 		if (is_array($generated) && !empty($generated['error'])) return $out;
 		if (!is_string($generated) || trim($generated) === '') return $out;
 		if ($guard) {
-			$generated = $guard->unmaskAiResponse($generated);
+			// The answer is JSON text: the restored values are escaped (a name with a quote broke it)
+			$generated = $guard->unmaskAiResponse($generated, true);
 		}
 
 		$decoded = self::decodeJsonFromAiString($generated);

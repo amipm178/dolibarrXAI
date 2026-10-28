@@ -185,8 +185,16 @@ class ToolNavigation extends McpTool
 		}
 
 		// Merge extra params
+		// Only parameters that narrow a list or a search: the model (which reads data typed by third
+		// parties) must not be able to add 'action', 'confirm', 'token', 'massaction' or to replace the
+		// 'id' the permission check was done on. The link is a page of Dolibarr, never an operation.
 		if (!empty($params) && is_array($params)) {
-			$getQueryParams = array_merge($getQueryParams, $params);
+			foreach ($params as $paramKey => $paramValue) {
+				if (!is_scalar($paramValue) || !preg_match('/^(search_[A-Za-z0-9_]+|sall|sortfield|sortorder|page|limit|mode|socid|contextpage|type|status|viewstatut|leftmenu|mainmenu|optioncss)$/', (string) $paramKey)) {
+					continue;
+				}
+				$getQueryParams[(string) $paramKey] = $paramValue;
+			}
 		}
 
 		// Generate Native URL
