@@ -497,7 +497,7 @@ class Ai
 			}
 
 			return $generatedContent;
-		} catch (Exception $e) {
+		} catch (\Throwable $e) {
 			$errormessage = $e->getMessage();
 			$errormessagelog = $e->getMessage();
 			if (!empty($response['content'])) {
