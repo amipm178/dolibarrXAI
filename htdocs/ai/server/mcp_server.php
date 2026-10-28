@@ -121,6 +121,15 @@ if ($serviceUser === null) {
 		]);
 		exit;
 	}
+	// A disabled account must not keep serving requests because the shared key still works.
+	if (isset($serviceUser->status) && (int) $serviceUser->status === 0) {
+		http_response_code(403);
+		echo json_encode([
+			"jsonrpc" => "2.0",
+			"error" => ["code" => -32000, "message" => "MCP Service User is disabled"]
+		]);
+		exit;
+	}
 	$serviceUser->loadRights();
 }
 
@@ -181,19 +190,25 @@ function mcp_log_request(array $req, $resp, float $tStart, string $rawInput): vo
 
 	$rawResStr = is_string($resp) ? $resp : (string) json_encode($resp);
 
-	ai_log_request(
-		$db,
-		$serviceUser,
-		$query,
-		$responseShape,
-		'mcp',
-		microtime(true) - $tStart,
-		1.0,
-		$status,
-		$errorMsg,
-		$rawInput,
-		$rawResStr
-	);
+	// The answer has already been sent when this runs: a failure of the audit log (database error,
+	// bad value) must not append a second JSON document to the response.
+	try {
+		ai_log_request(
+			$db,
+			$serviceUser,
+			$query,
+			$responseShape,
+			'mcp',
+			microtime(true) - $tStart,
+			1.0,
+			$status,
+			$errorMsg,
+			$rawInput,
+			$rawResStr
+		);
+	} catch (\Throwable $e) {
+		dol_syslog('[MCP Server] Cannot write the request log: ' . get_class($e), LOG_ERR);
+	}
 }
 
 // Request handling
@@ -203,13 +218,13 @@ try {
 	// Basic payload size limit
 	$rawInput = file_get_contents('php://input');
 	if ($rawInput === false || strlen($rawInput) > 1024 * 1024) {
-		throw new Exception("Invalid or too large request");
+		throw new Exception('Request too large', 413);
 	}
 
 	$request = json_decode($rawInput, true);
 
 	if (json_last_error() !== JSON_ERROR_NONE) {
-		throw new Exception("Parse Error");
+		throw new Exception('Parse error', 400);
 	}
 
 	$server = new MCPServer($db, $conf, $serviceUser);
@@ -255,6 +270,7 @@ try {
 		// Answer to all MCP requests following the MCP protocol
 		foreach ($request as $req) {
 			if (!is_array($req)) {
+				$responses[] = ["jsonrpc" => "2.0", "id" => null, "error" => ["code" => -32600, "message" => "Invalid Request"]];
 				continue;
 			}
 
@@ -269,11 +285,16 @@ try {
 			mcp_log_request($req, $res, $reqStart, (string) json_encode($req));
 		}
 
-		echo json_encode($responses);
+		if ($responses === []) {
+			// Only notifications: nothing to answer. Streamable HTTP asks for 202 Accepted without a body.
+			http_response_code(202);
+		} else {
+			echo json_encode($responses);
+		}
 	} else {
 		// Single request
 		if (!is_array($request)) {
-			throw new Exception("Invalid request format");
+			throw new Exception('Invalid Request', 400);
 		}
 
 		$response = $server->validateTransportHeaders($headers, $request);
@@ -293,24 +314,37 @@ try {
 
 		if ($response !== null) {
 			echo json_encode($response);
+		} elseif ($server->getHttpStatus() === 200) {
+			// Notification: Streamable HTTP asks for 202 Accepted without a body.
+			http_response_code(202);
 		}
 
 		// Log this tools/call to llx_ai_request_log (no-op unless AI_LOG_REQUESTS is enabled
 		// and the method is tools/call).
 		mcp_log_request($request, $response, $tStart, $rawInput);
 	}
-} catch (Exception $e) {
-	dol_syslog(
-		'[MCP Server] Fatal error: ' . $e->getMessage(),
-		LOG_ERR
-	);
+} catch (\Throwable $e) {
+	// Throwable: a TypeError raised below the protocol layer used to end as a PHP fatal error with
+	// an HTML body. Only the errors raised on purpose above carry a status; the rest is an internal
+	// error whose details stay in the syslog.
+	dol_syslog('[MCP Server] Request failed: ' . get_class($e) . ': ' . $e->getMessage(), LOG_ERR);
 
+	$httpStatus = 500;
+	$rpcCode = -32603;
+	$rpcMessage = 'Internal error';
+	if ($e instanceof Exception && ($e->getCode() === 400 || $e->getCode() === 413)) {
+		$httpStatus = $e->getCode();
+		$rpcMessage = $e->getMessage();
+		$rpcCode = ($rpcMessage === 'Parse error') ? -32700 : -32600;
+	}
+
+	http_response_code($httpStatus);
 	echo json_encode([
 		"jsonrpc" => "2.0",
 		"id" => null,
 		"error" => [
-			"code" => -32700,
-			"message" => "Parse error"
+			"code" => $rpcCode,
+			"message" => $rpcMessage
 		]
 	]);
 }

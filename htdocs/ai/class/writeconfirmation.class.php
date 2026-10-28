@@ -77,7 +77,14 @@ class AiWriteConfirmation
 			return '';
 		}
 
-		$state = dol_hash($secret.'|'.$toolName.'|'.$user->id.'|'.dol_now().'|'.microtime(true).'|'.mt_rand(), 'sha256');
+		// The state is a bearer secret: it comes from the system CSPRNG, not from a clock and mt_rand().
+		try {
+			$state = bin2hex(random_bytes(32));
+		} catch (\Throwable $e) {
+			$this->error = 'Cannot generate a confirmation state';
+
+			return '';
+		}
 		$ttl = getDolGlobalInt('AI_WRITE_CONFIRMATION_TTL_MINUTES', self::DEFAULT_TTL_MINUTES);
 		if ($ttl <= 0) {
 			$ttl = self::DEFAULT_TTL_MINUTES;

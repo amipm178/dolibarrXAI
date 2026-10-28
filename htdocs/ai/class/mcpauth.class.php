@@ -129,19 +129,19 @@ class McpAuth
 
 		$credential = '';
 
-		if (!empty($server['HTTP_DOLAPIKEY'])) {
+		if (!empty($server['HTTP_DOLAPIKEY']) && is_string($server['HTTP_DOLAPIKEY'])) {
 			$credential = $server['HTTP_DOLAPIKEY'];
 		}
 
 		if ($credential === '') {
 			$authheader = '';
-			if (!empty($server['HTTP_AUTHORIZATION'])) {
+			if (!empty($server['HTTP_AUTHORIZATION']) && is_string($server['HTTP_AUTHORIZATION'])) {
 				$authheader = $server['HTTP_AUTHORIZATION'];
-			} elseif (!empty($server['REDIRECT_HTTP_AUTHORIZATION'])) {
+			} elseif (!empty($server['REDIRECT_HTTP_AUTHORIZATION']) && is_string($server['REDIRECT_HTTP_AUTHORIZATION'])) {
 				$authheader = $server['REDIRECT_HTTP_AUTHORIZATION'];
 			} elseif (function_exists('getallheaders')) {
 				$headers = array_change_key_case(getallheaders(), CASE_LOWER);
-				$authheader = isset($headers['authorization']) ? $headers['authorization'] : '';
+				$authheader = (isset($headers['authorization']) && is_string($headers['authorization'])) ? $headers['authorization'] : '';
 			}
 			$reg = array();
 			if ($authheader !== '' && preg_match('/^Bearer\s+(\S+)$/i', $authheader, $reg)) {
@@ -149,7 +149,7 @@ class McpAuth
 			}
 		}
 
-		if ($credential === '' && !empty($server['HTTP_X_API_KEY'])) {
+		if ($credential === '' && !empty($server['HTTP_X_API_KEY']) && is_string($server['HTTP_X_API_KEY'])) {
 			$credential = $server['HTTP_X_API_KEY'];
 		}
 
@@ -161,7 +161,8 @@ class McpAuth
 		// webserver level and rotate the key regularly.
 		if ($credential === '') {
 			foreach (array('DOLAPIKEY', 'api_key', 'key') as $param) {
-				if (!empty($get[$param])) {
+				// ?key[]=x gives an array: it used to be cast to the string "Array" with a PHP warning
+				if (!empty($get[$param]) && is_string($get[$param])) {
 					$credential = $get[$param];
 					break;
 				}
