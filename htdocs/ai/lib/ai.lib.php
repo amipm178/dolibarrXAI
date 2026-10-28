@@ -1455,9 +1455,10 @@ function aiNameWordsInSequence($phrase, $name)
  * @param	string			$nature		'supplier' or 'customer' to narrow candidates when that leaves at least one, '' for all
  * @param	array<string>	$stopwords	Words never accepted alone as a partial name (translated keywords)
  * @param	int				$maxwords	Distinct words looked up, in order of appearance
+ * @param	bool				$ignoreVisibility	True to match every third party, whoever the user is: only for masking names, never to show or resolve one
  * @return	array<int, array{phrase:string, raw:string, start:int, end:int, exact:bool, first:bool, words:int, candidates:array<int, array{id:int, name:string, name_alias:string, client:int, fournisseur:int, town:string, visible:bool}>}>
  */
-function aiFindThirdpartiesInText($db, $user, $text, $nature = '', $stopwords = array(), $maxwords = 80)
+function aiFindThirdpartiesInText($db, $user, $text, $nature = '', $stopwords = array(), $maxwords = 80, $ignoreVisibility = false)
 {
 	$words = aiNameWords($text);
 	if (empty($words)) {
@@ -1494,6 +1495,17 @@ function aiFindThirdpartiesInText($db, $user, $text, $nature = '', $stopwords = 
 	$sql = "SELECT s.rowid, s.nom, s.name_alias, s.client, s.fournisseur, s.town";
 	$sql .= " FROM ".$db->prefix()."societe as s";
 	$sql .= " WHERE s.entity IN (".getEntity('societe').")";
+	// The doc says "visibility of candidates" but nothing applied it: the candidates shown to the user
+	// (choice list), and the names resolved to an id, included third parties the user may not see
+	// (external user, sales representative without "see all customers"). Masking a name needs the
+	// opposite - more names, not fewer - hence $ignoreVisibility.
+	if (!$ignoreVisibility) {
+		if (!empty($user->socid)) {
+			$sql .= " AND s.rowid = ".((int) $user->socid);
+		} elseif (!$user->hasRight('societe', 'client', 'voir')) {
+			$sql .= " AND s.rowid IN (SELECT sc.fk_soc FROM ".$db->prefix()."societe_commerciaux as sc WHERE sc.fk_user = ".((int) $user->id).")";
+		}
+	}
 	$sql .= " AND (1 = 0";
 	foreach ($lookup as $norm => $raw) {
 		// The word as written and normalised, and without its last two letters
@@ -1741,7 +1753,7 @@ function aiRestoreDocumentBlocks($text, array $blocks)
 function aiThirdpartyNamesToMask($db, $user, $text, $stopwords = array(), $data = null)
 {
 	$names = array();
-	foreach (aiFindThirdpartiesInText($db, $user, $text, '', $stopwords) as $mt) {
+	foreach (aiFindThirdpartiesInText($db, $user, $text, '', $stopwords, 80, true) as $mt) {
 		$names[] = $mt['raw'];
 		foreach ($mt['candidates'] as $c) {
 			$names[] = $c['name'];
