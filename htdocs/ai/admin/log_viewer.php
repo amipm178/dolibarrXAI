@@ -412,7 +412,7 @@ print '</tr>';
 print '<tr class="liste_titre">';
 print '<td class="liste_titre" colspan="10">';
 print '<div class="center">';
-print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=purge&token='.newToken().'" onclick="return confirm(\''.$langs->trans("ConfirmDeleteAllLogs").'\');">'.$langs->trans("ClearAllLogs").'</a></div>';
+print '<div class="inline-block divButAction"><a class="butAction" href="'.$_SERVER["PHP_SELF"].'?action=purge&confirm=yes&token='.newToken().'" onclick="return confirm(\''.dol_escape_js($langs->transnoentitiesnoconv("ConfirmDeleteAllLogs")).'\');">'.$langs->trans("ClearAllLogs").'</a></div>';
 print '</div>';
 print '</td>';
 print '</tr>';

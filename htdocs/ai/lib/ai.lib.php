@@ -249,7 +249,7 @@ function testAIConnection(string $service, string $key, string $url): array
 				$url .= "/$model:generateContent";
 			}
 		}
-		$url .= "?key=" . $key;
+		$headers[] = "x-goog-api-key: $key";	// header, not ?key=: a key in the URL ends up in the logs
 		$data = ["contents" => [ ["parts" => [ ["text" => "Hello"] ] ] ], "generationConfig" => ["maxOutputTokens" => 5]];
 	} elseif ($service == 'anthropic' || strpos($url, 'anthropic') !== false) {  // ANTHROPIC
 		if (strpos($url, 'messages') === false) $url .= '/messages';
@@ -715,10 +715,15 @@ function getAiProviderModelList($db, $forcerefresh = false)
 		return array('service' => $serviceKey, 'models' => array());
 	}
 
+	// Same rule as the generation calls: local addresses only when conf.php allows them (this
+	// request used to accept them unconditionally, and sends the API key to the URL).
+	global $dolibarr_ai_allow_local_endpoints;
+	$localurl = empty($dolibarr_ai_allow_local_endpoints) ? 0 : 2;
+
 	$models = array();
 	if ($adapterType === 'anthropic') {
 		$headers = array('x-api-key: '.$apiKey, 'anthropic-version: 2023-06-01');
-		$res = getURLContent($baseUrl.'/models?limit=100', 'GET', '', 1, $headers, array('http', 'https'), 2);
+		$res = getURLContent($baseUrl.'/models?limit=100', 'GET', '', 1, $headers, array('http', 'https'), $localurl);
 		$json = json_decode($res['content'] ?? '', true);
 		foreach ((array) ($json['data'] ?? array()) as $m) {
 			if (!empty($m['id'])) {
@@ -726,7 +731,7 @@ function getAiProviderModelList($db, $forcerefresh = false)
 			}
 		}
 	} elseif ($adapterType === 'google') {
-		$res = getURLContent($baseUrl.'/models?pageSize=200&key='.urlencode($apiKey), 'GET', '', 1, array(), array('http', 'https'), 2);
+		$res = getURLContent($baseUrl.'/models?pageSize=200', 'GET', '', 1, array('x-goog-api-key: '.$apiKey), array('http', 'https'), $localurl);
 		$json = json_decode($res['content'] ?? '', true);
 		foreach ((array) ($json['models'] ?? array()) as $m) {
 			if (!empty($m['name'])) {
@@ -736,7 +741,7 @@ function getAiProviderModelList($db, $forcerefresh = false)
 	} else {
 		// OpenAI-compatible providers (OpenAI, Mistral, Groq, DeepSeek, custom...)
 		$headers = array('Authorization: Bearer '.$apiKey);
-		$res = getURLContent($baseUrl.'/models', 'GET', '', 1, $headers, array('http', 'https'), 2);
+		$res = getURLContent($baseUrl.'/models', 'GET', '', 1, $headers, array('http', 'https'), $localurl);
 		$json = json_decode($res['content'] ?? '', true);
 		foreach ((array) ($json['data'] ?? array()) as $m) {
 			if (!empty($m['id'])) {

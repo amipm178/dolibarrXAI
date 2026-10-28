@@ -265,7 +265,8 @@ class UniversalLLMAdapter
 			$url .= ":generateContent";
 		}
 
-		$url .= "?key=" . $this->key;
+		// The key goes in a header, as in Ai::generateContent(): in the URL it ends up in the web server,
+		// proxy and Dolibarr logs.
 
 		// With attachments, prepend native inline_data parts (Gemini vision /
 		// document understanding) before the text part.
@@ -284,7 +285,7 @@ class UniversalLLMAdapter
 			foreach ($history as $turn) {
 				$contents[] = array(
 					"role" => (($turn['role'] ?? '') === 'assistant' ? 'model' : 'user'),
-					"parts" => array(array("text" => (string) $turn['text']))
+					"parts" => array(array("text" => (string) ($turn['text'] ?? '')))
 				);
 			}
 			$contents[] = array("role" => "user", "parts" => $parts);
@@ -302,7 +303,7 @@ class UniversalLLMAdapter
 
 		$this->lastRequest = $this->encodeRequestForLog($data);
 
-		return $this->curl($url, $data, array("Content-Type: application/json"), false, true);
+		return $this->curl($url, $data, array("Content-Type: application/json", "x-goog-api-key: " . $this->key), false, true);
 	}
 
 	/**

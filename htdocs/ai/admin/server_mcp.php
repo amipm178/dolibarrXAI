@@ -335,7 +335,7 @@ if (getDolGlobalString('AI_MCP_ENABLED')) {
 		print '<div class="center">';
 
 		if ($currentService && $currentService !== '-1') {
-			print ' <a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=test_provider&token='.newToken().'&service_key='.$currentService.'" class="button">Test Connection</a>';
+			print ' <a class="reposition" href="'.$_SERVER["PHP_SELF"].'?action=test_provider&token='.newToken().'&service_key='.urlencode($currentService).'" class="button">Test Connection</a>';
 		}
 
 		print '</div>';
