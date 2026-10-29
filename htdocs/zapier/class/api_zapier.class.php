@@ -221,19 +221,45 @@ class Zapier extends DolibarrApi
 			throw new RestException(403);
 		}
 
-		dol_syslog("API Zapier create hook receive : ".print_r($request_data, true), LOG_DEBUG);
+		// The url of a hook is the secret that lets anyone post to its Zap: not written in the log.
+		dol_syslog("API Zapier create hook receive : ".(is_array($request_data) ? implode(',', array_keys($request_data)) : gettype($request_data)), LOG_DEBUG);
 
-		// Check mandatory fields
+		if (!is_array($request_data)) {
+			throw new RestException(400, "Body must be a JSON object");
+		}
+
+		// Check mandatory fields. The result is only a check: validate() returns the mandatory fields
+		// alone, and the loop below used to run on it, so 'module', 'action', 'event' and 'caller'
+		// sent by Zapier were dropped. A hook saved without module and action is never matched by the
+		// trigger (WHERE module = ... AND action = ...): its Zap was never called.
 		$fields = array(
 			'url',
 		);
-		$request_data = $this->validate($request_data, $fields);
+		$this->validate($request_data, $fields);
+
+		if (!is_string($request_data['url']) || !preg_match('#^https?://#i', $request_data['url'])) {
+			throw new RestException(400, "url must be an http(s) URL");
+		}
+
+		// Fields a client may set. Anything else (entity, rowid, import_key, date_creation...) is ignored:
+		// the loop used to assign any property of the request to the object.
+		$allowedfields = array('url', 'module', 'action', 'event', 'status');
 
 		foreach ($request_data as $field => $value) {
 			if ($field === 'caller') {
 				// Add a mention of caller so on trigger called after action, we can filter to avoid a loop if we try to sync back again with the caller
 				$this->hook->context['caller'] = sanitizeVal($request_data['caller'], 'aZ09');
 				continue;
+			}
+			if (!in_array($field, $allowedfields, true)) {
+				continue;
+			}
+			if (!is_scalar($value)) {
+				throw new RestException(400, $field." must be a string");
+			}
+			if (in_array($field, array('module', 'action'), true)) {
+				// Compared with the lowercase trigger code (USER_CREATE -> user / create)
+				$value = strtolower(sanitizeVal((string) $value, 'aZ09'));
 			}
 
 			$this->hook->$field = $this->_checkValForAPI($field, $value, $this->hook);

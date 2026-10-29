@@ -70,7 +70,8 @@ class InterfaceZapierTriggers extends DolibarrTriggers
 		if ($action != '') {
 			$actions = explode('_', $action);
 			$sql = 'SELECT rowid, url FROM '.MAIN_DB_PREFIX.'zapier_hook';
-			$sql .= ' WHERE module="'.$this->db->escape(strtolower($actions[0])).'" AND action="'.$this->db->escape(strtolower($actions[1])).'"';
+			// An action code without "_" has no second part: undefined index before
+			$sql .= ' WHERE module="'.$this->db->escape(strtolower($actions[0])).'" AND action="'.$this->db->escape(strtolower(isset($actions[1]) ? $actions[1] : '')).'"';
 			//setEventMessages($sql, null);
 		}
 
@@ -80,7 +81,7 @@ class InterfaceZapierTriggers extends DolibarrTriggers
 				$resql = $this->db->query($sql);
 				// TODO voir comment regrouper les webhooks en un post
 				while ($resql && $obj = $this->db->fetch_array($resql)) {
-					$cleaned = cleanObjectDatas(dol_clone($object));
+					$cleaned = cleanUserDatas(cleanObjectDatas(dol_clone($object)));
 					$json = json_encode($cleaned);
 					// call the zapierPostWebhook() function
 					zapierPostWebhook($obj['url'], $json);
@@ -91,7 +92,7 @@ class InterfaceZapierTriggers extends DolibarrTriggers
 				$resql = $this->db->query($sql);
 				// TODO voir comment regrouper les webhooks en un post
 				while ($resql && $obj = $this->db->fetch_array($resql)) {
-					$cleaned = cleanObjectDatas(dol_clone($object));
+					$cleaned = cleanUserDatas(cleanObjectDatas(dol_clone($object)));
 					$json = json_encode($cleaned);
 					// call the zapierPostWebhook() function
 					zapierPostWebhook($obj['url'], $json);
@@ -495,6 +496,31 @@ function cleanObjectDatas($toclean)
 			}
 		}
 	}*/
+
+	return $toclean;
+}
+
+/**
+ * Remove from a User what must never leave Dolibarr.
+ *
+ * USER_CREATE / USER_MODIFY posted the whole user object to the Zap, an external service:
+ * password hashes, API key, click-to-dial password, salary. Same list as the users REST API,
+ * which never returns them whatever the permissions (salary data: no permission context here,
+ * so never sent).
+ *
+ * @param   Object  $toclean    User object (already passed through cleanObjectDatas)
+ * @return  Object              User without the sensitive properties
+ */
+function cleanUserDatas($toclean)
+{
+	foreach (array(
+		'pass', 'pass_crypted', 'pass_indatabase', 'pass_indatabase_crypted', 'pass_temp',
+		'api_key', 'clicktodial_password', 'openid',
+		'salary', 'salaryextra', 'thm', 'tjm',
+		'rights', 'nb_rights', 'all_permissions_are_loaded', 'conf'
+	) as $property) {
+		unset($toclean->$property);
+	}
 
 	return $toclean;
 }
