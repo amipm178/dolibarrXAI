@@ -428,7 +428,9 @@ class SupplierOrders extends DolibarrApi
 	 *
 	 * @param int $id Supplier order ID
 	 * @param int $lineid Line ID
-	 * @param array<string,mixed>|null $request_data Fields to change
+	 * @param array $request_data Fields to change
+	 * @phan-param ?array<string,mixed> $request_data
+	 * @phpstan-param ?array<string,mixed> $request_data
 	 * @return CommandeFournisseurLigne Updated line
 	 * @url PUT {id}/lines/{lineid}
 	 */
@@ -466,7 +468,64 @@ class SupplierOrders extends DolibarrApi
 		if ($result <= 0) {
 			throw new RestException(400, $this->order->errorsToString());
 		}
-		return $this->getLine($id, $lineid);
+
+		$line = new CommandeFournisseurLigne($this->db);
+		if ($line->fetch($lineid) <= 0) {
+			throw new RestException(500, 'Failed to reload the updated line');
+		}
+
+		$this->_cleanObjectDatas($line);
+		return $line;
+	}
+
+	/**
+	 * Deletes a line of a given draft supplier order
+	 *
+	 * A line that has already been received cannot be deleted.
+	 *
+	 * @since	25.0.0	Initial implementation
+	 * @param	int		$id			Id of supplier order
+	 * @param	int		$lineid		Id of the line to delete
+	 *
+	 * @url	DELETE {id}/lines/{lineid}
+	 *
+	 * @return	array
+	 * @phan-return array{success:array{code:int,message:string}}
+	 * @phpstan-return array{success:array{code:int,message:string}}
+	 *
+	 * @throws RestException 400 Bad parameters
+	 * @throws RestException 403 Not allowed
+	 * @throws RestException 404 Not found
+	 * @throws RestException 405 Error
+	 */
+	public function deleteLine($id, $lineid)
+	{
+		if (empty($lineid)) {
+			throw new RestException(400, 'Line ID is mandatory');
+		}
+
+		if (!DolibarrApiAccess::$user->hasRight('fournisseur', 'commande', 'creer')) {
+			throw new RestException(403);
+		}
+
+		// Checks read permission and access to the order, and that the line belongs to it
+		$this->loadLineForOperation($id, $lineid);
+
+		if ((int) $this->order->status !== CommandeFournisseur::STATUS_DRAFT) {
+			throw new RestException(405, 'Supplier order must be in draft status to delete lines');
+		}
+
+		$updateRes = $this->order->deleteLine((int) $lineid);
+		if ($updateRes > 0) {
+			return array(
+				'success' => array(
+					'code' => 200,
+					'message' => 'line '.$lineid.' deleted'
+				)
+			);
+		} else {
+			throw new RestException(405, $this->order->errorsToString());
+		}
 	}
 
 	/**

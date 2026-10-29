@@ -60,6 +60,20 @@ class PrivacyGuard
 	{
 		$this->startSession();
 
+		// Emails, before the references: a local part with digits (jean2024@...) would
+		// otherwise be taken as a reference and the domain sent unmasked.
+		$text = preg_replace_callback(
+			'/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/',
+			/**
+			 * @param array<int, string> $m
+			 * @return string
+			 */
+			function (array $m) {
+				return $this->createToken($m[0], 'EMAIL');
+			},
+			$text
+		);
+
 		// IBAN as people write and print it, in groups of four ("FR76 3000 6000 0112 3456 7890 189").
 		// This runs before the reference pass: that one only took the first group ("FR76"), the
 		// 23 other digits of the account went to the provider in clear.
@@ -118,19 +132,6 @@ class PrivacyGuard
 			 */
 			function (array $m) {
 				return $this->createToken($m[0], 'BANKACCT');
-			},
-			$text
-		);
-
-		// Emails
-		$text = preg_replace_callback(
-			'/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/',
-			/**
-			 * @param array<int, string> $m
-			 * @return string
-			 */
-			function (array $m) {
-				return $this->createToken($m[0], 'EMAIL');
 			},
 			$text
 		);
