@@ -209,7 +209,7 @@ class InterfaceWebhookTriggers extends DolibarrTriggers
 	}
 
 	/**
-	 *  Remove the db property from a payload, including the objects nested into its arrays.
+	 *  Remove the db property and the credentials of a user from a payload, including the objects nested into its arrays.
 	 *
 	 *  @param	object|array<mixed>	$payload	Payload to clean, modified in place
 	 *  @param	int					$depth		Current recursion depth, used as a safety stop
@@ -223,6 +223,14 @@ class InterfaceWebhookTriggers extends DolibarrTriggers
 
 		if (is_array($payload)) {
 			foreach ($payload as $key => $value) {
+				// What a User object carries and the users REST API never returns, whatever the
+				// permissions: a USER_* trigger (or any object holding a user) must not post a password
+				// (still in clear in the object when the trigger runs on creation), its hash or the API key
+				// of the account to the target URL.
+				if (is_string($key) && in_array($key, array('pass', 'pass_crypted', 'pass_indatabase', 'pass_indatabase_crypted', 'pass_temp', 'api_key', 'clicktodial_password', 'openid'), true)) {
+					unset($payload[$key]);
+					continue;
+				}
 				if (is_array($value) || is_object($value)) {
 					$this->removeDbFromPayload($payload[$key], $depth + 1);
 				}
